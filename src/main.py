@@ -22,7 +22,7 @@ def main(page: ft.Page):
         elif selected_index == 1:
             content_container.content = settings_page(page)
         elif selected_index == 2:
-            content_container.content = employees_page()
+            content_container.content = employees_page(page)
         
         # Закрываем drawer и обновляем страницу
         page.close(page.drawer)
