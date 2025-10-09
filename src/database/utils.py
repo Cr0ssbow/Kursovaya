@@ -1,6 +1,7 @@
 from datetime import datetime, date
 from decimal import Decimal
-from .models import Employee, db
+from peewee import DoesNotExist
+from .models import Employee, db, Settings
 
 def add_test_employees():
     """Добавляет тестовых сотрудников в базу данных"""
@@ -43,3 +44,13 @@ def clear_employees():
     query = Employee.delete()
     deleted = query.execute()
     print(f"Удалено {deleted} сотрудников")
+
+def save_theme_to_db(theme: str):
+    Settings.insert(key="theme", value=theme).on_conflict_replace().execute()
+
+def load_theme_from_db() -> str:
+    try:
+        setting = Settings.get(Settings.key == "theme")
+        return setting.value
+    except DoesNotExist:
+        return "light"

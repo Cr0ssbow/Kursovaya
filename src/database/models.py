@@ -16,6 +16,10 @@ class BaseModel(Model):
     class Meta:
         database = db
 
+class Settings(BaseModel):
+    key = CharField(unique=True)
+    value = CharField()
+
 class Employee(BaseModel):
     """Модель сотрудника"""
     full_name = CharField(max_length=200, verbose_name="ФИО")
@@ -23,7 +27,9 @@ class Employee(BaseModel):
     photo_path = CharField(max_length=500, null=True, verbose_name="Путь к фото")
     hire_date = DateField(verbose_name="Дата принятия на работу")
     termination_date = DateField(null=True, verbose_name="Дата увольнения")
-    salary = DecimalField(max_digits=10, decimal_places=2, verbose_name="Зарплата")
+    hourly_rate = DecimalField(max_digits=7, decimal_places=2, verbose_name="Почасовая ставка", default=0)
+    hours_worked = IntegerField(verbose_name="Количество часов", default=0)
+    salary = DecimalField(max_digits=10, decimal_places=2, verbose_name="Зарплата", default=0)
     created_at = DateTimeField(default=datetime.now)
     
     class Meta:
@@ -33,11 +39,15 @@ class Employee(BaseModel):
         """Проверка, работает ли сотрудник"""
         return self.termination_date is None
 
+    def calc_salary(self):
+        """Расчет зарплаты: часы * ставка"""
+        return float(self.hourly_rate) * self.hours_worked
+
 # Создание таблиц
 def init_database():
     """Инициализация базы данных"""
     db.connect()
-    db.create_tables([Employee], safe=True)
+    db.create_tables([Employee, Settings], safe=True)
     db.close()
 
 # Инициализируем базу данных при импорте

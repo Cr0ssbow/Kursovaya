@@ -4,8 +4,13 @@ from menu.drawer import drawer
 from views.home import home_page
 from views.employees import employees_page
 from views.settings import settings_page
+from database.utils import load_theme_from_db
 
 def main(page: ft.Page):
+    # Загружаем тему из БД при старте
+    theme = load_theme_from_db()
+    page.theme_mode = ft.ThemeMode.DARK if theme == "dark" else ft.ThemeMode.LIGHT
+
     # Контейнер для отображения текущей страницы
     content_container = ft.Container(
         content=home_page(),  # По умолчанию показываем главную страницу
