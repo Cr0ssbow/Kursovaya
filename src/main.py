@@ -3,9 +3,15 @@ from peewee import *
 from menu.drawer import drawer
 from views.home import home_page
 from views.employees import employees_page
-from views.settings import settings_page
+from views.settings import settings_page, load_theme_from_db
+from views.calendar import calendar_page
+from views.objects import objects_page
 
 def main(page: ft.Page):
+    # Загружаем тему из БД при старте
+    theme = load_theme_from_db()
+    page.theme_mode = ft.ThemeMode.DARK if theme == "dark" else ft.ThemeMode.LIGHT
+
     # Контейнер для отображения текущей страницы
     content_container = ft.Container(
         content=home_page(),  # По умолчанию показываем главную страницу
@@ -22,7 +28,11 @@ def main(page: ft.Page):
         elif selected_index == 1:
             content_container.content = settings_page(page)
         elif selected_index == 2:
-            content_container.content = employees_page()
+            content_container.content = employees_page(page)
+        elif selected_index == 3:
+            content_container.content = calendar_page(page)
+        elif selected_index == 4:
+            content_container.content = objects_page(page)
         
         # Закрываем drawer и обновляем страницу
         page.close(page.drawer)
