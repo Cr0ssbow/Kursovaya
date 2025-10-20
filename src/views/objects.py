@@ -6,6 +6,8 @@ objects_table = None
 def objects_page(page: ft.Page = None) -> ft.Column:
     sort_column = "name"
     sort_reverse = False
+    current_page = 0
+    page_size = 13
     global objects_table
 
     # Диалог и поля формы
@@ -156,8 +158,7 @@ def objects_page(page: ft.Page = None) -> ft.Column:
                 page.update()
 
     def refresh_table():
-        """Обновляет данные в таблице с учетом поиска"""
-        # db.connect(reuse_if_open=True) # Removed explicit connect
+        """Обновляет данные в таблице с учетом поиска и пагинации"""
         if search_value:
             objects_list = list(Object.select().where(Object.name.contains(search_value)).order_by(Object.name))
         else:
@@ -168,8 +169,14 @@ def objects_page(page: ft.Page = None) -> ft.Column:
                 return obj.name
             return obj.name
         objects_list.sort(key=key, reverse=sort_reverse)
+        
+        # Пагинация
+        start_idx = current_page * page_size
+        end_idx = start_idx + page_size
+        page_objects = objects_list[start_idx:end_idx]
+        
         objects_table.rows.clear()
-        for obj in objects_list:
+        for obj in page_objects:
             objects_table.rows.append(
                 ft.DataRow(
                     cells=[
@@ -179,9 +186,15 @@ def objects_page(page: ft.Page = None) -> ft.Column:
                     ]
                 )
             )
+        
+        # Обновляем кнопки пагинации
+        total_pages = (len(objects_list) + page_size - 1) // page_size
+        prev_btn.disabled = current_page == 0
+        next_btn.disabled = current_page >= total_pages - 1
+        page_info.value = f"Страница {current_page + 1} из {max(1, total_pages)}"
+        
         if page:
             page.update()
-        # db.close() # Removed explicit close
 
     def on_sort(col):
         nonlocal sort_column, sort_reverse
@@ -195,11 +208,32 @@ def objects_page(page: ft.Page = None) -> ft.Column:
             page.update()
 
     def on_search_change(e):
-        nonlocal search_value
+        nonlocal search_value, current_page
         search_value = e.control.value.strip()
+        current_page = 0  # Сброс на первую страницу при поиске
         refresh_table()
         if page:
             page.update()
+    
+    def prev_page(e):
+        nonlocal current_page
+        if current_page > 0:
+            current_page -= 1
+            refresh_table()
+            if page:
+                page.update()
+    
+    def next_page(e):
+        nonlocal current_page
+        current_page += 1
+        refresh_table()
+        if page:
+            page.update()
+    
+    # Элементы пагинации
+    prev_btn = ft.IconButton(icon=ft.Icons.ARROW_BACK, on_click=prev_page)
+    next_btn = ft.IconButton(icon=ft.Icons.ARROW_FORWARD, on_click=next_page)
+    page_info = ft.Text("Страница 1 из 1")
     
     # Создаем DataTable
     objects_table = ft.DataTable(
@@ -213,10 +247,10 @@ def objects_page(page: ft.Page = None) -> ft.Column:
         vertical_lines=ft.border.BorderSide(1, ft.Colors.OUTLINE),
         heading_row_height=70,
         data_row_min_height=50,
-        data_row_max_height=100,
+        data_row_max_height=50,
         column_spacing=10,
         width=4000,
-        height=4000
+        height=707
     )
     refresh_table()
     
@@ -244,12 +278,19 @@ def objects_page(page: ft.Page = None) -> ft.Column:
                 ),
             ], alignment=ft.MainAxisAlignment.START),
             ft.Container(
-                content=objects_table,
+                content=ft.Column([
+                    objects_table
+                ], scroll=ft.ScrollMode.AUTO),
                 border=ft.border.all(1, ft.Colors.OUTLINE),
                 border_radius=10,
                 padding=10,
                 expand=True,
             ),
+            ft.Row([
+                prev_btn,
+                page_info,
+                next_btn,
+            ], alignment=ft.MainAxisAlignment.CENTER),
         ],
         spacing=10,
         expand=True,
