@@ -12,7 +12,23 @@ def format_date(date):
 
 def format_salary(salary):
     """Форматирует зарплату в строку с разделителями"""
-    return f"{float(salary):,.2f}".replace(",", " ").replace(".", ",") + " ₽"
+    n = int(float(salary) * 100)
+    formatted = ""
+    count = 0
+    
+    while n > 0:
+        if count > 0 and count % 3 == 0:
+            formatted = " " + formatted
+        formatted = str(n % 10) + formatted
+        n = n // 10
+        count += 1
+    
+    if len(formatted) > 2:
+        formatted = formatted[:-2] + "," + formatted[-2:]
+    else:
+        formatted = "0," + formatted.zfill(2)
+    
+    return formatted + " ₽"
 
 employees_table = None
 
@@ -56,11 +72,16 @@ def employees_page(page: ft.Page = None) -> ft.Column:
         from datetime import datetime
         try:
             full_name = name_field.value.strip()
-            birth_date = datetime.strptime(birth_field.value.strip(), "%d.%m.%Y").date()
-            hire_date = datetime.strptime(hire_field.value.strip(), "%d.%m.%Y").date()
-            salary = float(salary_field.value.strip().replace(",", "."))
+            birth_value = birth_field.value.strip()
+            hire_value = hire_field.value.strip()
+            salary_value = salary_field.value.strip().replace(",", ".")
+            salary = float(salary_value) if salary_value else 0.0
             if not full_name:
                 raise ValueError("ФИО обязательно!")
+            
+            birth_date = datetime.strptime(birth_value, "%d.%m.%Y").date() if birth_value else None
+            hire_date = datetime.strptime(hire_value, "%d.%m.%Y").date() if hire_value else None
+            
             Employee.create(
                 full_name=full_name,
                 birth_date=birth_date,
@@ -179,7 +200,7 @@ def employees_page(page: ft.Page = None) -> ft.Column:
         ], spacing=10)
         edit_dialog.actions = [
             ft.TextButton("Сохранить", on_click=lambda e, emp=employee: save_edit_employee(emp)),
-            ft.TextButton("Удалить", on_click=lambda e, emp=employee: show_confirm_delete_dialog(emp), style=ft.ButtonStyle(color=ft.colors.RED)),
+            ft.TextButton("Удалить", on_click=lambda e, emp=employee: show_confirm_delete_dialog(emp), style=ft.ButtonStyle(color=ft.Colors.RED)),
             ft.TextButton("Отмена", on_click=close_edit_dialog),
         ]
         edit_dialog.open = True
@@ -196,9 +217,14 @@ def employees_page(page: ft.Page = None) -> ft.Column:
     def save_edit_employee(employee):
         from datetime import datetime
         try:
-            employee.full_name = edit_name.value.strip()
-            employee.birth_date = datetime.strptime(edit_birth.value.strip(), "%d.%m.%Y").date()
-            employee.hire_date = datetime.strptime(edit_hire.value.strip(), "%d.%m.%Y").date()
+            full_name = edit_name.value.strip()
+            if not full_name:
+                raise ValueError("ФИО обязательно!")
+            employee.full_name = full_name
+            birth_value = edit_birth.value.strip()
+            hire_value = edit_hire.value.strip()
+            employee.birth_date = datetime.strptime(birth_value, "%d.%m.%Y").date() if birth_value and birth_value != "Не указано" else None
+            employee.hire_date = datetime.strptime(hire_value, "%d.%m.%Y").date() if hire_value and hire_value != "Не указано" else None
             employee.salary = float(edit_salary.value.strip().replace(",", "."))
             employee.save()
             close_edit_dialog(None)

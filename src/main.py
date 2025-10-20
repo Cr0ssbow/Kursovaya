@@ -51,7 +51,7 @@ def main(page: ft.Page):
     page.drawer = drawer(handle_navigation_change)
     
     # Добавляем кнопку меню и контейнер с содержимым
-    page.add(
+    page.add( 
         ft.Row(
             [
                 ft.IconButton(

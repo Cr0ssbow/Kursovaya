@@ -26,9 +26,9 @@ class Employee(BaseModel):
         return cls.select().where(cls.full_name == full_name).exists()
     """Модель сотрудника"""
     full_name = CharField(max_length=200, verbose_name="ФИО")
-    birth_date = DateField(verbose_name="Дата рождения")
+    birth_date = DateField(null=True, verbose_name="Дата рождения")
     photo_path = CharField(max_length=500, null=True, verbose_name="Путь к фото")
-    hire_date = DateField(verbose_name="Дата принятия на работу")
+    hire_date = DateField(null=True, verbose_name="Дата принятия на работу")
     termination_date = DateField(null=True, verbose_name="Дата увольнения")
     hourly_rate = DecimalField(max_digits=7, decimal_places=2, verbose_name="Почасовая ставка", default=0)
     hours_worked = IntegerField(verbose_name="Количество часов", default=0)
@@ -65,6 +65,18 @@ def init_database():
     """Инициализация базы данных"""
     db.connect()
     db.create_tables([Employee, Settings, Object], safe=True)
+    
+    # Миграция: добавляем null=True к полям дат
+    try:
+        db.execute_sql('PRAGMA table_info(employees)')
+        # Пересоздаем таблицу с новой структурой
+        db.execute_sql('DROP TABLE IF EXISTS employees_backup')
+        db.execute_sql('ALTER TABLE employees RENAME TO employees_backup')
+        db.create_tables([Employee], safe=False)
+        db.execute_sql('INSERT INTO employees (id, full_name, birth_date, photo_path, hire_date, termination_date, hourly_rate, hours_worked, salary, created_at) SELECT id, full_name, birth_date, photo_path, hire_date, termination_date, hourly_rate, hours_worked, salary, created_at FROM employees_backup')
+        db.execute_sql('DROP TABLE employees_backup')
+    except:
+        pass
 
 # Инициализируем базу данных при импорте
 init_database()

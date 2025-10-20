@@ -70,6 +70,38 @@ def objects_page(page: ft.Page = None) -> ft.Column:
     edit_address = ft.TextField(label="Адрес объекта", width=300)
     edit_description = ft.TextField(label="Описание объекта", multiline=True, width=300)
 
+    # Диалог подтверждения удаления
+    confirm_delete_dialog = ft.AlertDialog(
+        modal=True,
+        title=ft.Text("Подтвердите удаление"),
+        content=ft.Text("Вы уверены, что хотите удалить этот объект?"),
+        actions=[
+            ft.TextButton("Да", on_click=None),
+            ft.TextButton("Отмена", on_click=lambda e: close_confirm_delete_dialog()),
+        ]
+    )
+
+    def show_confirm_delete_dialog(obj):
+        confirm_delete_dialog.actions[0].on_click = lambda e: delete_object(obj)
+        confirm_delete_dialog.open = True
+        if page and confirm_delete_dialog not in page.overlay:
+            page.overlay.append(confirm_delete_dialog)
+        if page:
+            page.update()
+
+    def close_confirm_delete_dialog():
+        confirm_delete_dialog.open = False
+        if page:
+            page.update()
+
+    def delete_object(obj):
+        obj.delete_instance()
+        close_confirm_delete_dialog()
+        close_edit_dialog(None)
+        refresh_table()
+        if page:
+            page.update()
+
     def show_edit_dialog(obj):
         edit_name.value = obj.name
         edit_address.value = obj.address
@@ -82,6 +114,7 @@ def objects_page(page: ft.Page = None) -> ft.Column:
         ], spacing=10)
         edit_dialog.actions = [
             ft.TextButton("Сохранить", on_click=lambda e, object_id=obj.id: save_edit_object(object_id)),
+            ft.TextButton("Удалить", on_click=lambda e, obj_to_delete=obj: show_confirm_delete_dialog(obj_to_delete), style=ft.ButtonStyle(color=ft.Colors.RED)),
             ft.TextButton("Отмена", on_click=close_edit_dialog),
         ]
         edit_dialog.open = True
