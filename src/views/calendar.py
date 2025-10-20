@@ -1,6 +1,8 @@
 import datetime
 import flet as ft
 import locale
+from database.models import Employee, db
+from peewee import OperationalError
 
 # Set locale for Russian month names
 locale.setlocale(locale.LC_ALL, 'ru_RU.UTF-8')
@@ -11,8 +13,51 @@ def calendar_page(page: ft.Page):
     current_month_display = ft.Text("", size=24, weight=ft.FontWeight.BOLD)
     calendar_grid_container = ft.Column()
 
+    # Fetch employees from the database
+    employees = []
+    try:
+        if db.is_closed():
+            db.connect()
+        employees = Employee.select()
+    except OperationalError as e:
+        print(f"Error fetching employees: {e}")
+    finally:
+        if not db.is_closed():
+            db.close()
+
+    employee_options = [ft.dropdown.Option(emp.full_name) for emp in employees]
+    employee_dropdown = ft.Dropdown(
+        label="Сотрудник",
+        options=employee_options,
+        width=600,
+    )
+
+    date_menu = ft.AlertDialog(
+        modal=True,
+        title=ft.Text("Действия с датой"),
+        content=ft.Column([
+            ft.Text(""), # This will be updated with the selected date
+            employee_dropdown,
+        ]),
+        actions=[
+            ft.TextButton("Закрыть", on_click=lambda e: close_date_menu(e)),
+        ],
+        actions_alignment=ft.MainAxisAlignment.END,
+    )
+
+    def open_date_menu(date_obj):
+        date_menu.content.controls[0].value = f"Выбрана дата: {date_obj.strftime('%d.%m.%Y')}"
+        page.dialog = date_menu
+        date_menu.open = True
+        page.update()
+
+    def close_date_menu(e):
+        date_menu.open = False
+        page.update()
+
     def on_date_select(e):
         selected_date_text.value = f"Выбрана дата: {e.control.data.strftime('%d.%m.%Y')}"
+        open_date_menu(e.control.data)
         page.update()
 
     def create_day_button(day, date_obj):
@@ -105,7 +150,7 @@ def calendar_page(page: ft.Page):
 
     update_calendar_view() # Initial calendar render
 
-    return ft.Column(
+    calendar_content = ft.Column(
         [
             selected_date_text,
             ft.Row(
@@ -121,3 +166,4 @@ def calendar_page(page: ft.Page):
         ],
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
     )
+    return calendar_content, date_menu

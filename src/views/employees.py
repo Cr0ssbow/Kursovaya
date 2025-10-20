@@ -133,6 +133,38 @@ def employees_page(page: ft.Page = None) -> ft.Column:
     edit_hire = ft.TextField(label="Дата принятия (дд.мм.гггг)", width=180)
     edit_salary = ft.TextField(label="Зарплата", width=120)
 
+    # Диалог подтверждения удаления
+    confirm_delete_dialog = ft.AlertDialog(
+        modal=True,
+        title=ft.Text("Подтвердите удаление"),
+        content=ft.Text("Вы уверены, что хотите удалить этого сотрудника?"),
+        actions=[
+            ft.TextButton("Да", on_click=None), # Будет установлен динамически
+            ft.TextButton("Отмена", on_click=lambda e: close_confirm_delete_dialog()),
+        ]
+    )
+
+    def show_confirm_delete_dialog(employee_to_delete):
+        confirm_delete_dialog.actions[0].on_click = lambda e: delete_employee(employee_to_delete)
+        confirm_delete_dialog.open = True
+        if page and confirm_delete_dialog not in page.overlay:
+            page.overlay.append(confirm_delete_dialog)
+        if page:
+            page.update()
+
+    def close_confirm_delete_dialog():
+        confirm_delete_dialog.open = False
+        if page:
+            page.update()
+
+    def delete_employee(employee):
+        employee.delete_employee()
+        close_confirm_delete_dialog()
+        close_edit_dialog(None) # Закрываем диалог редактирования после удаления
+        refresh_table()
+        if page:
+            page.update()
+
     def show_edit_dialog(employee):
         edit_name.value = employee.full_name
         edit_birth.value = format_date(employee.birth_date)
@@ -147,6 +179,7 @@ def employees_page(page: ft.Page = None) -> ft.Column:
         ], spacing=10)
         edit_dialog.actions = [
             ft.TextButton("Сохранить", on_click=lambda e, emp=employee: save_edit_employee(emp)),
+            ft.TextButton("Удалить", on_click=lambda e, emp=employee: show_confirm_delete_dialog(emp), style=ft.ButtonStyle(color=ft.colors.RED)),
             ft.TextButton("Отмена", on_click=close_edit_dialog),
         ]
         edit_dialog.open = True

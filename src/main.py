@@ -8,6 +8,10 @@ from views.calendar import calendar_page
 from views.objects import objects_page
 
 def main(page: ft.Page):
+    page.window_width = 800
+    page.window_height = 600
+    page.window_min_width = 800
+    page.window_min_height = 600
     # Загружаем тему из БД при старте
     theme = load_theme_from_db()
     page.theme_mode = ft.ThemeMode.DARK if theme == "dark" else ft.ThemeMode.LIGHT
@@ -30,9 +34,14 @@ def main(page: ft.Page):
         elif selected_index == 2:
             content_container.content = employees_page(page)
         elif selected_index == 3:
-            content_container.content = calendar_page(page)
-        elif selected_index == 4:
             content_container.content = objects_page(page)
+        elif selected_index == 4:
+            calendar_content, date_menu_dialog = calendar_page(page)
+            content_container.content = calendar_content
+            # Ensure the AlertDialog is added to the page's overlay only once
+            if date_menu_dialog not in page.overlay:
+                page.overlay.append(date_menu_dialog)
+
         
         # Закрываем drawer и обновляем страницу
         page.close(page.drawer)

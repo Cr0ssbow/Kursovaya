@@ -46,12 +46,25 @@ class Employee(BaseModel):
         """Расчет зарплаты: часы * ставка"""
         return float(self.hourly_rate) * self.hours_worked
 
+    def delete_employee(self):
+        """Удаление сотрудника из базы данных"""
+        self.delete_instance()
+
+class Object(BaseModel):
+    """Модель объекта"""
+    name = CharField(max_length=200, unique=True, verbose_name="Название объекта")
+    address = CharField(max_length=500, null=True, verbose_name="Адрес объекта")
+    description = TextField(null=True, verbose_name="Описание")
+    created_at = DateTimeField(default=datetime.now)
+
+    class Meta:
+        table_name = 'objects'
+
 # Создание таблиц
 def init_database():
     """Инициализация базы данных"""
     db.connect()
-    db.create_tables([Employee, Settings], safe=True)
-    db.close()
+    db.create_tables([Employee, Settings, Object], safe=True)
 
 # Инициализируем базу данных при импорте
 init_database()

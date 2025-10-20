@@ -24,14 +24,14 @@ def drawer(on_change_handler):
                 selected_icon=ft.Icons.PERSON_OUTLINED,
             ),
             ft.NavigationDrawerDestination(
-                icon=ft.Icon(ft.Icons.CALENDAR_MONTH),
-                label="Календарь",
-                selected_icon=ft.Icons.CALENDAR_MONTH_OUTLINED,
-            ),
-            ft.NavigationDrawerDestination(
                 icon=ft.Icon(ft.Icons.BUSINESS),
                 label="Объекты",
                 selected_icon=ft.Icons.BUSINESS_OUTLINED,
+            ),
+            ft.NavigationDrawerDestination(
+                icon=ft.Icon(ft.Icons.CALENDAR_MONTH),
+                label="Календарь",
+                selected_icon=ft.Icons.CALENDAR_MONTH_OUTLINED,
             ),
         ],
     )
