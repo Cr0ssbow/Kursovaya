@@ -1,5 +1,5 @@
 import flet as ft
-from database.models import Employee, db
+from database.models import Employee, Assignment, db
 from datetime import datetime
 
 def load_employees():
@@ -39,12 +39,19 @@ def employees_page(page: ft.Page = None) -> ft.Column:
     page_size = 13
     global employees_table
     
+    def format_date_input(e):
+        """Автоматически форматирует ввод даты"""
+        value = e.control.value.replace(".", "")
+        if len(value) == 8 and value.isdigit():
+            formatted = f"{value[:2]}.{value[2:4]}.{value[4:]}"
+            e.control.value = formatted
+            e.control.update()
+    
     # Диалог и поля формы
     add_dialog = ft.AlertDialog(modal=True)
     name_field = ft.TextField(label="ФИО", width=300)
-    birth_field = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=180)
-    hire_field = ft.TextField(label="Дата принятия (дд.мм.гггг)", width=180)
-    salary_field = ft.TextField(label="Зарплата", width=120)
+    birth_field = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=180, on_change=format_date_input)
+    hire_field = ft.TextField(label="Дата принятия (дд.мм.гггг)", width=180, on_change=format_date_input)
 
     def show_add_dialog(e):
         add_dialog.title = ft.Text("Добавить сотрудника")
@@ -52,7 +59,6 @@ def employees_page(page: ft.Page = None) -> ft.Column:
             name_field,
             birth_field,
             hire_field,
-            salary_field,
         ], spacing=10)
         add_dialog.actions = [
             ft.TextButton("Сохранить", on_click=save_employee),
@@ -76,35 +82,37 @@ def employees_page(page: ft.Page = None) -> ft.Column:
             full_name = name_field.value.strip()
             birth_value = birth_field.value.strip()
             hire_value = hire_field.value.strip()
-            salary_value = salary_field.value.strip().replace(",", ".")
-            salary = float(salary_value) if salary_value else 0.0
+            
             if not full_name:
                 raise ValueError("ФИО обязательно!")
+            if not birth_value:
+                raise ValueError("Дата рождения обязательна!")
+            if not hire_value:
+                raise ValueError("Дата принятия на работу обязательна!")
             
-            birth_date = datetime.strptime(birth_value, "%d.%m.%Y").date() if birth_value else None
-            hire_date = datetime.strptime(hire_value, "%d.%m.%Y").date() if hire_value else None
+            birth_date = datetime.strptime(birth_value, "%d.%m.%Y").date()
+            hire_date = datetime.strptime(hire_value, "%d.%m.%Y").date()
             
             Employee.create(
                 full_name=full_name,
                 birth_date=birth_date,
-                hire_date=hire_date,
-                salary=salary
+                hire_date=hire_date
             )
             close_add_dialog(e)
             refresh_table()
             if page:
                 page.update()
-        except Exception as ex:
+        except ValueError as ex:
             add_dialog.content = ft.Column([
                 name_field,
                 birth_field,
                 hire_field,
-                salary_field,
-                ft.Text(f"Ошибка: {ex}", color=ft.Colors.RED)
+                ft.Text(f"Ошибка: {str(ex)}", color=ft.Colors.RED)
             ], spacing=10)
-            # actions не меняем, чтобы не дублировались
             if page:
                 page.update()
+        except Exception:
+            pass
     
     search_value = ""
 
@@ -134,13 +142,24 @@ def employees_page(page: ft.Page = None) -> ft.Column:
         
         employees_table.rows.clear()
         for employee in page_employees:
+            # Вычисляем зарплату из назначений
+            try:
+                if db.is_closed():
+                    db.connect()
+                assignments = Assignment.select().where(Assignment.employee == employee)
+                total_salary = sum(float(a.hourly_rate) * a.hours for a in assignments)
+                if not db.is_closed():
+                    db.close()
+            except:
+                total_salary = 0
+            
             employees_table.rows.append(
                 ft.DataRow(
                     cells=[
                         ft.DataCell(ft.Text(employee.full_name), on_tap=lambda e, emp=employee: show_edit_dialog(emp)),
                         ft.DataCell(ft.Text(format_date(employee.birth_date))),
                         ft.DataCell(ft.Text(format_date(employee.hire_date))),
-                        ft.DataCell(ft.Text(format_salary(employee.salary))),
+                        ft.DataCell(ft.Text(f"{total_salary:.2f} ₽")),
                     ]
                 )
             )
@@ -164,9 +183,8 @@ def employees_page(page: ft.Page = None) -> ft.Column:
     # Диалог редактирования
     edit_dialog = ft.AlertDialog(modal=True)
     edit_name = ft.TextField(label="ФИО", width=300)
-    edit_birth = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=180)
-    edit_hire = ft.TextField(label="Дата принятия (дд.мм.гггг)", width=180)
-    edit_salary = ft.TextField(label="Зарплата", width=120)
+    edit_birth = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=180, on_change=format_date_input)
+    edit_hire = ft.TextField(label="Дата принятия (дд.мм.гггг)", width=180, on_change=format_date_input)
 
     # Диалог подтверждения удаления
     confirm_delete_dialog = ft.AlertDialog(
@@ -204,13 +222,11 @@ def employees_page(page: ft.Page = None) -> ft.Column:
         edit_name.value = employee.full_name
         edit_birth.value = format_date(employee.birth_date)
         edit_hire.value = format_date(employee.hire_date)
-        edit_salary.value = str(employee.salary)
         edit_dialog.title = ft.Text(f"Редактировать сотрудника")
         edit_dialog.content = ft.Column([
             edit_name,
             edit_birth,
             edit_hire,
-            edit_salary,
         ], spacing=10)
         edit_dialog.actions = [
             ft.TextButton("Сохранить", on_click=lambda e, emp=employee: save_edit_employee(emp)),
@@ -232,27 +248,33 @@ def employees_page(page: ft.Page = None) -> ft.Column:
         from datetime import datetime
         try:
             full_name = edit_name.value.strip()
-            if not full_name:
-                raise ValueError("ФИО обязательно!")
-            employee.full_name = full_name
             birth_value = edit_birth.value.strip()
             hire_value = edit_hire.value.strip()
-            employee.birth_date = datetime.strptime(birth_value, "%d.%m.%Y").date() if birth_value and birth_value != "Не указано" else None
-            employee.hire_date = datetime.strptime(hire_value, "%d.%m.%Y").date() if hire_value and hire_value != "Не указано" else None
-            employee.salary = float(edit_salary.value.strip().replace(",", "."))
+            
+            if not full_name:
+                raise ValueError("ФИО обязательно!")
+            if not birth_value or birth_value == "Не указано":
+                raise ValueError("Дата рождения обязательна!")
+            if not hire_value or hire_value == "Не указано":
+                raise ValueError("Дата принятия на работу обязательна!")
+            
+            employee.full_name = full_name
+            employee.birth_date = datetime.strptime(birth_value, "%d.%m.%Y").date()
+            employee.hire_date = datetime.strptime(hire_value, "%d.%m.%Y").date()
             employee.save()
             close_edit_dialog(None)
             refresh_table()
             if page:
                 page.update()
-        except Exception as ex:
+        except ValueError as ex:
             edit_dialog.content = ft.Column([
                 edit_name,
                 edit_birth,
                 edit_hire,
-                edit_salary,
-                ft.Text(f"Ошибка: {ex}", color=ft.Colors.RED)
+                ft.Text(f"Ошибка: {str(ex)}", color=ft.Colors.RED)
             ], spacing=10)
+        except Exception:
+            pass
             # actions не меняем, чтобы не дублировались
             if page:
                 page.update()

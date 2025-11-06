@@ -15,16 +15,19 @@ def objects_page(page: ft.Page = None) -> ft.Column:
     name_field = ft.TextField(label="Название объекта", width=300)
     address_field = ft.TextField(label="Адрес объекта", width=300)
     description_field = ft.TextField(label="Описание объекта", multiline=True, width=300)
+    hourly_rate_field = ft.TextField(label="Почасовая ставка", width=150)
 
     def show_add_dialog(e):
         name_field.value = ""
         address_field.value = ""
         description_field.value = ""
+        hourly_rate_field.value = ""
         add_dialog.title = ft.Text("Добавить объект")
         add_dialog.content = ft.Column([
             name_field,
             address_field,
             description_field,
+            hourly_rate_field,
         ], spacing=10)
         add_dialog.actions = [
             ft.TextButton("Сохранить", on_click=save_object),
@@ -46,10 +49,14 @@ def objects_page(page: ft.Page = None) -> ft.Column:
             name = name_field.value.strip()
             address = address_field.value.strip()
             description = description_field.value.strip()
+            hourly_rate_value = hourly_rate_field.value.strip().replace(",", ".")
+            hourly_rate = float(hourly_rate_value) if hourly_rate_value else 0.0
             if not name:
                 raise ValueError("Название объекта обязательно!")
+            if not hourly_rate_value:
+                raise ValueError("Почасовая ставка обязательна!")
             with db.atomic():
-                Object.create(name=name, address=address, description=description)
+                Object.create(name=name, address=address, description=description, hourly_rate=hourly_rate)
             close_add_dialog(e)
             refresh_table()
             if page:
@@ -59,6 +66,7 @@ def objects_page(page: ft.Page = None) -> ft.Column:
                 name_field,
                 address_field,
                 description_field,
+                hourly_rate_field,
                 ft.Text(f"Ошибка: {ex}", color=ft.Colors.RED)
             ], spacing=10)
             if page:
@@ -71,6 +79,7 @@ def objects_page(page: ft.Page = None) -> ft.Column:
     edit_name = ft.TextField(label="Название объекта", width=300)
     edit_address = ft.TextField(label="Адрес объекта", width=300)
     edit_description = ft.TextField(label="Описание объекта", multiline=True, width=300)
+    edit_hourly_rate = ft.TextField(label="Почасовая ставка", width=150)
 
     # Диалог подтверждения удаления
     confirm_delete_dialog = ft.AlertDialog(
@@ -108,11 +117,13 @@ def objects_page(page: ft.Page = None) -> ft.Column:
         edit_name.value = obj.name
         edit_address.value = obj.address
         edit_description.value = obj.description
+        edit_hourly_rate.value = str(obj.hourly_rate)
         edit_dialog.title = ft.Text("Редактировать объект")
         edit_dialog.content = ft.Column([
             edit_name,
             edit_address,
             edit_description,
+            edit_hourly_rate,
         ], spacing=10)
         edit_dialog.actions = [
             ft.TextButton("Сохранить", on_click=lambda e, object_id=obj.id: save_edit_object(object_id)),
@@ -135,13 +146,18 @@ def objects_page(page: ft.Page = None) -> ft.Column:
             new_name = edit_name.value.strip()
             new_address = edit_address.value.strip()
             new_description = edit_description.value.strip()
+            new_hourly_rate_value = edit_hourly_rate.value.strip().replace(",", ".")
+            new_hourly_rate = float(new_hourly_rate_value) if new_hourly_rate_value else 0.0
             if not new_name:
                 raise ValueError("Название объекта обязательно!")
+            if not new_hourly_rate_value:
+                raise ValueError("Почасовая ставка обязательна!")
             with db.atomic():
                 object_to_update = Object.get_by_id(object_id)
                 object_to_update.name = new_name
                 object_to_update.address = new_address
                 object_to_update.description = new_description
+                object_to_update.hourly_rate = new_hourly_rate
                 object_to_update.save()
             close_edit_dialog(None)
             refresh_table()
@@ -152,6 +168,7 @@ def objects_page(page: ft.Page = None) -> ft.Column:
                 edit_name,
                 edit_address,
                 edit_description,
+                edit_hourly_rate,
                 ft.Text(f"Ошибка: {ex}", color=ft.Colors.RED)
             ], spacing=10)
             if page:
@@ -182,6 +199,7 @@ def objects_page(page: ft.Page = None) -> ft.Column:
                     cells=[
                         ft.DataCell(ft.Text(obj.name), on_tap=lambda e, object_data=obj: show_edit_dialog(object_data)),
                         ft.DataCell(ft.Text(obj.address)),
+                        ft.DataCell(ft.Text(f"{float(obj.hourly_rate):.2f} ₽")),
                         ft.DataCell(ft.Text(obj.description)),
                     ]
                 )
@@ -239,8 +257,9 @@ def objects_page(page: ft.Page = None) -> ft.Column:
     objects_table = ft.DataTable(
         columns=[
             ft.DataColumn(ft.Text("Название объекта", width=200), on_sort=lambda _: on_sort("name")),
-            ft.DataColumn(ft.Text("Адрес объекта", width=300)),
-            ft.DataColumn(ft.Text("Описание", width=400)),
+            ft.DataColumn(ft.Text("Адрес объекта", width=250)),
+            ft.DataColumn(ft.Text("Почасовая ставка", width=150)),
+            ft.DataColumn(ft.Text("Описание", width=300)),
         ],
         rows=[],
         horizontal_lines=ft.border.BorderSide(1, ft.Colors.OUTLINE),

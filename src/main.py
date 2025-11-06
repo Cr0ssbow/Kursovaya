@@ -29,21 +29,24 @@ def main(page: ft.Page):
         # Переключаем страницу в зависимости от индекса
         if selected_index == 0:
             content_container.content = home_page()
+
         elif selected_index == 1:
             content_container.content = settings_page(page)
+
         elif selected_index == 2:
             content_container.content = employees_page(page)
+
         elif selected_index == 3:
             content_container.content = objects_page(page)
+
         elif selected_index == 4:
             calendar_content, date_menu_dialog = calendar_page(page)
             content_container.content = calendar_content
-            # Ensure the AlertDialog is added to the page's overlay only once
+            
             if date_menu_dialog not in page.overlay:
                 page.overlay.append(date_menu_dialog)
 
         
-        # Закрываем drawer и обновляем страницу
         page.close(page.drawer)
         page.update()
     

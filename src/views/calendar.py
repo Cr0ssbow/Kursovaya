@@ -1,7 +1,7 @@
 import datetime
 import flet as ft
 import locale
-from database.models import Employee, db
+from database.models import Employee, Object, Assignment, db
 from peewee import OperationalError
 
 # Set locale for Russian month names
@@ -13,39 +13,141 @@ def calendar_page(page: ft.Page):
     current_month_display = ft.Text("", size=24, weight=ft.FontWeight.BOLD)
     calendar_grid_container = ft.Column()
 
-    # Fetch employees from the database
+    # Fetch employees and objects from the database
     employees = []
+    objects = []
     try:
         if db.is_closed():
             db.connect()
         employees = Employee.select()
+        objects = Object.select()
     except OperationalError as e:
-        print(f"Error fetching employees: {e}")
+        print(f"Error fetching data: {e}")
     finally:
         if not db.is_closed():
             db.close()
 
-    employee_options = [ft.dropdown.Option(emp.full_name) for emp in employees]
-    employee_dropdown = ft.Dropdown(
-        label="Сотрудник",
-        options=employee_options,
-        width=600,
+    # Поле поиска сотрудника
+    employee_search = ft.TextField(
+        label="Поиск сотрудника",
+        width=300,
+        on_change=lambda e: search_employees(e.control.value),
     )
+    
+    # Список найденных сотрудников
+    search_results = ft.Column(visible=False)
+    
+    def search_employees(query):
+        if not query or len(query) < 2:
+            search_results.visible = False
+            page.update()
+            return
+            
+        # Поиск сотрудников по имени
+        filtered_employees = [emp for emp in employees if query.lower() in emp.full_name.lower()]
+        
+        search_results.controls.clear()
+        if filtered_employees:
+            for emp in filtered_employees[:5]:  # Показываем максимум 5 результатов
+                search_results.controls.append(
+                    ft.ListTile(
+                        title=ft.Text(emp.full_name),
+                        on_click=lambda e, employee=emp: select_employee(employee),
+
+                    )
+                )
+            search_results.visible = True
+        else:
+            search_results.controls.append(
+                ft.Text("Сотрудник не найден", color=ft.Colors.ERROR)
+            )
+            search_results.visible = True
+        page.update()
+    
+    def select_employee(employee):
+        employee_search.value = employee.full_name
+        search_results.visible = False
+        page.update()
+    
+    # Поле поиска объекта
+    object_search = ft.TextField(
+        label="Поиск объекта",
+        width=300,
+        on_change=lambda e: search_objects(e.control.value),
+    )
+    
+    # Список найденных объектов
+    object_search_results = ft.Column(visible=False)
+    
+    def search_objects(query):
+        if not query or len(query) < 2:
+            object_search_results.visible = False
+            page.update()
+            return
+            
+        # Поиск объектов по названию
+        filtered_objects = [obj for obj in objects if query.lower() in obj.name.lower()]
+        
+        object_search_results.controls.clear()
+        if filtered_objects:
+            for obj in filtered_objects[:5]:  # Показываем максимум 5 результатов
+                object_search_results.controls.append(
+                    ft.ListTile(
+                        title=ft.Text(obj.name),
+                        on_click=lambda e, object_item=obj: select_object(object_item),
+                    )
+                )
+            object_search_results.visible = True
+        else:
+            object_search_results.controls.append(
+                ft.Text("Объект не найден", color=ft.Colors.ERROR)
+            )
+            object_search_results.visible = True
+        page.update()
+    
+    def select_object(obj):
+        object_search.value = obj.name
+        object_search_results.visible = False
+        hourly_rate_display.value = f"Почасовая ставка: {float(obj.hourly_rate):.2f} ₽"
+        address_display.value = f"Адрес: {obj.address or 'не указан'}"
+        page.update()
+    
+    hours_dropdown = ft.Dropdown(
+        label="Количество часов",
+        options=[
+            ft.dropdown.Option("12"),
+            ft.dropdown.Option("24")
+        ],
+        value="12",
+        width=200,
+    )
+    
+    hourly_rate_display = ft.Text("Почасовая ставка: не выбрано", size=16)
+    address_display = ft.Text("Адрес: не выбрано", size=16)
 
     date_menu = ft.AlertDialog(
         modal=True,
         title=ft.Text("Действия с датой"),
         content=ft.Column([
             ft.Text(""), # This will be updated with the selected date
-            employee_dropdown,
-        ]),
+            employee_search,
+            search_results,
+            object_search,
+            object_search_results,
+            hours_dropdown,
+            address_display,
+            hourly_rate_display,
+        ], spacing=10),
         actions=[
+            ft.TextButton("Сохранить", on_click=lambda e: save_date_assignment(e)),
             ft.TextButton("Закрыть", on_click=lambda e: close_date_menu(e)),
         ],
         actions_alignment=ft.MainAxisAlignment.END,
     )
 
     def open_date_menu(date_obj):
+        nonlocal selected_date
+        selected_date = date_obj
         date_menu.content.controls[0].value = f"Выбрана дата: {date_obj.strftime('%d.%m.%Y')}"
         page.dialog = date_menu
         date_menu.open = True
@@ -54,6 +156,68 @@ def calendar_page(page: ft.Page):
     def close_date_menu(e):
         date_menu.open = False
         page.update()
+    
+    selected_date = None
+    
+    def save_date_assignment(e):
+        selected_employee_name = employee_search.value
+        selected_object_name = object_search.value
+        selected_hours = hours_dropdown.value
+        
+        if selected_employee_name and selected_object_name and selected_hours and selected_date:
+            try:
+                if db.is_closed():
+                    db.connect()
+                
+                # Находим сотрудника и объект
+                employee = Employee.get(Employee.full_name == selected_employee_name)
+                obj = Object.get(Object.name == selected_object_name)
+                
+                # Сохраняем назначение
+                Assignment.create(
+                    employee=employee,
+                    object=obj,
+                    date=selected_date,
+                    hours=int(selected_hours),
+                    hourly_rate=obj.hourly_rate
+                )
+                
+                # Обновляем зарплату сотрудника
+                salary_increase = float(obj.hourly_rate) * int(selected_hours)
+                new_salary = float(employee.salary) + salary_increase
+                new_hours = employee.hours_worked + int(selected_hours)
+                
+                employee.salary = new_salary
+                employee.hours_worked = new_hours
+                employee.save()
+                
+
+                
+                close_date_menu(e)
+                success_snack = ft.SnackBar(
+                    content=ft.Text(f"Назначение сохранено! Зарплата: {new_salary:.2f} ₽"),
+                    bgcolor=ft.Colors.GREEN,
+                    duration=3000
+                )
+                page.overlay.append(success_snack)
+                success_snack.open = True
+                page.update()
+                
+            except Exception as ex:
+                close_date_menu(e)
+                error_snack = ft.SnackBar(
+                    content=ft.Text(f"Ошибка сохранения: {str(ex)}"),
+                    bgcolor=ft.Colors.RED,
+                    duration=3000
+                )
+                page.overlay.append(error_snack)
+                error_snack.open = True
+                page.update()
+            finally:
+                if not db.is_closed():
+                    db.close()
+        else:
+            close_date_menu(e)
 
     def on_date_select(e):
         selected_date_text.value = f"Выбрана дата: {e.control.data.strftime('%d.%m.%Y')}"
