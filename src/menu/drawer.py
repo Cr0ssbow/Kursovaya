@@ -33,5 +33,10 @@ def drawer(on_change_handler):
                 label="Календарь",
                 selected_icon=ft.Icons.CALENDAR_MONTH_OUTLINED,
             ),
+            ft.NavigationDrawerDestination(
+                icon=ft.Icon(ft.Icons.ATTACH_MONEY),
+                label="Зарплата",
+                selected_icon=ft.Icons.ATTACH_MONEY_OUTLINED,
+            ),
         ],
     )

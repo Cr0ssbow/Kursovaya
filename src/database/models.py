@@ -31,7 +31,7 @@ class Employee(BaseModel):
     hire_date = DateField(verbose_name="Дата принятия на работу")
     termination_date = DateField(null=True, verbose_name="Дата увольнения")
     guard_license_date = DateField(null=True, verbose_name="Дата выдачи удостоверения охранника")
-    guard_rank = IntegerField(null=True, verbose_name="Разряд охранника (1-6)")
+    guard_rank = IntegerField(null=True, verbose_name="Разряд охранника (3-6)")
     hourly_rate = DecimalField(max_digits=7, decimal_places=2, verbose_name="Почасовая ставка", default=0)
     hours_worked = IntegerField(verbose_name="Количество часов", default=0)
     salary = DecimalField(max_digits=10, decimal_places=2, verbose_name="Зарплата", default=0)

@@ -6,6 +6,7 @@ from views.employees import employees_page
 from views.settings import settings_page, load_theme_from_db
 from views.calendar import calendar_page
 from views.objects import objects_page
+from views.salary import salary_page
 
 def main(page: ft.Page):
     page.window_width = 800
@@ -31,7 +32,7 @@ def main(page: ft.Page):
             content_container.content = home_page()
 
         elif selected_index == 1:
-            content_container.content = settings_page(page)
+            content_container.content = settings_page(page) 
 
         elif selected_index == 2:
             content_container.content = employees_page(page)
@@ -45,6 +46,9 @@ def main(page: ft.Page):
             
             if date_menu_dialog not in page.overlay:
                 page.overlay.append(date_menu_dialog)
+            
+        elif selected_index == 5:
+            content_container.content = salary_page(page)
 
         
         page.close(page.drawer)
