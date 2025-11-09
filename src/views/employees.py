@@ -43,15 +43,29 @@ def employees_page(page: ft.Page = None) -> ft.Column:
         """Автоматически форматирует ввод даты"""
         value = e.control.value.replace(".", "")
         if len(value) == 8 and value.isdigit():
-            formatted = f"{value[:2]}.{value[2:4]}.{value[4:]}"
+            day = int(value[:2])
+            month = int(value[2:4])
+            year = int(value[4:])
+            
+            if day > 31:
+                day = 31
+            if month > 12:
+                month = 12
+            if year > 2100:
+                year = 2100
+                
+            formatted = f"{day:02d}.{month:02d}.{year}"
             e.control.value = formatted
-            e.control.update()
+            if page:
+                page.update()
     
     # Диалог и поля формы
     add_dialog = ft.AlertDialog(modal=True)
     name_field = ft.TextField(label="ФИО", width=300)
-    birth_field = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=180, on_change=format_date_input)
-    hire_field = ft.TextField(label="Дата принятия (дд.мм.гггг)", width=180, on_change=format_date_input)
+    birth_field = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=180, on_change=format_date_input, input_filter=ft.InputFilter(regex_string=r"[0-9.]", allow=True), max_length=10)
+    hire_field = ft.TextField(label="Дата принятия (дд.мм.гггг)", width=180, on_change=format_date_input, input_filter=ft.InputFilter(regex_string=r"[0-9.]", allow=True), max_length=10)
+    guard_license_field = ft.TextField(label="Дата выдачи удостоверения (дд.мм.гггг)", width=250, on_change=format_date_input, input_filter=ft.InputFilter(regex_string=r"[0-9.]", allow=True), max_length=10)
+    guard_rank_field = ft.Dropdown(label="Разряд охранника", width=180, options=[ft.dropdown.Option(str(i)) for i in range(1, 7)])
 
     def show_add_dialog(e):
         add_dialog.title = ft.Text("Добавить сотрудника")
@@ -59,6 +73,8 @@ def employees_page(page: ft.Page = None) -> ft.Column:
             name_field,
             birth_field,
             hire_field,
+            guard_license_field,
+            guard_rank_field,
         ], spacing=10)
         add_dialog.actions = [
             ft.TextButton("Сохранить", on_click=save_employee),
@@ -82,6 +98,8 @@ def employees_page(page: ft.Page = None) -> ft.Column:
             full_name = name_field.value.strip()
             birth_value = birth_field.value.strip()
             hire_value = hire_field.value.strip()
+            guard_license_value = guard_license_field.value.strip()
+            guard_rank_value = guard_rank_field.value
             
             if not full_name:
                 raise ValueError("ФИО обязательно!")
@@ -92,11 +110,15 @@ def employees_page(page: ft.Page = None) -> ft.Column:
             
             birth_date = datetime.strptime(birth_value, "%d.%m.%Y").date()
             hire_date = datetime.strptime(hire_value, "%d.%m.%Y").date()
+            guard_license_date = datetime.strptime(guard_license_value, "%d.%m.%Y").date() if guard_license_value else None
+            guard_rank = int(guard_rank_value) if guard_rank_value else None
             
             Employee.create(
                 full_name=full_name,
                 birth_date=birth_date,
-                hire_date=hire_date
+                hire_date=hire_date,
+                guard_license_date=guard_license_date,
+                guard_rank=guard_rank
             )
             close_add_dialog(e)
             refresh_table()
@@ -107,6 +129,8 @@ def employees_page(page: ft.Page = None) -> ft.Column:
                 name_field,
                 birth_field,
                 hire_field,
+                guard_license_field,
+                guard_rank_field,
                 ft.Text(f"Ошибка: {str(ex)}", color=ft.Colors.RED)
             ], spacing=10)
             if page:
@@ -153,12 +177,17 @@ def employees_page(page: ft.Page = None) -> ft.Column:
             except:
                 total_salary = 0
             
+            guard_license_text = format_date(getattr(employee, 'guard_license_date', None))
+            guard_rank_text = str(getattr(employee, 'guard_rank', '')) if getattr(employee, 'guard_rank', None) else "Не указано"
+            
             employees_table.rows.append(
                 ft.DataRow(
                     cells=[
                         ft.DataCell(ft.Text(employee.full_name), on_tap=lambda e, emp=employee: show_edit_dialog(emp)),
                         ft.DataCell(ft.Text(format_date(employee.birth_date))),
                         ft.DataCell(ft.Text(format_date(employee.hire_date))),
+                        ft.DataCell(ft.Text(guard_license_text)),
+                        ft.DataCell(ft.Text(guard_rank_text)),
                         ft.DataCell(ft.Text(f"{total_salary:.2f} ₽")),
                     ]
                 )
@@ -183,8 +212,10 @@ def employees_page(page: ft.Page = None) -> ft.Column:
     # Диалог редактирования
     edit_dialog = ft.AlertDialog(modal=True)
     edit_name = ft.TextField(label="ФИО", width=300)
-    edit_birth = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=180, on_change=format_date_input)
-    edit_hire = ft.TextField(label="Дата принятия (дд.мм.гггг)", width=180, on_change=format_date_input)
+    edit_birth = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=180, on_change=format_date_input, input_filter=ft.InputFilter(regex_string=r"[0-9.]", allow=True), max_length=10)
+    edit_hire = ft.TextField(label="Дата принятия (дд.мм.гггг)", width=180, on_change=format_date_input, input_filter=ft.InputFilter(regex_string=r"[0-9.]", allow=True), max_length=10)
+    edit_guard_license = ft.TextField(label="Дата выдачи удостоверения (дд.мм.гггг)", width=250, on_change=format_date_input, input_filter=ft.InputFilter(regex_string=r"[0-9.]", allow=True), max_length=10)
+    edit_guard_rank = ft.Dropdown(label="Разряд охранника", width=180, options=[ft.dropdown.Option(str(i)) for i in range(1, 7)])
 
     # Диалог подтверждения удаления
     confirm_delete_dialog = ft.AlertDialog(
@@ -222,11 +253,15 @@ def employees_page(page: ft.Page = None) -> ft.Column:
         edit_name.value = employee.full_name
         edit_birth.value = format_date(employee.birth_date)
         edit_hire.value = format_date(employee.hire_date)
+        edit_guard_license.value = format_date(employee.guard_license_date) if hasattr(employee, 'guard_license_date') else ""
+        edit_guard_rank.value = str(employee.guard_rank) if hasattr(employee, 'guard_rank') and employee.guard_rank else None
         edit_dialog.title = ft.Text(f"Редактировать сотрудника")
         edit_dialog.content = ft.Column([
             edit_name,
             edit_birth,
             edit_hire,
+            edit_guard_license,
+            edit_guard_rank,
         ], spacing=10)
         edit_dialog.actions = [
             ft.TextButton("Сохранить", on_click=lambda e, emp=employee: save_edit_employee(emp)),
@@ -250,6 +285,8 @@ def employees_page(page: ft.Page = None) -> ft.Column:
             full_name = edit_name.value.strip()
             birth_value = edit_birth.value.strip()
             hire_value = edit_hire.value.strip()
+            guard_license_value = edit_guard_license.value.strip()
+            guard_rank_value = edit_guard_rank.value
             
             if not full_name:
                 raise ValueError("ФИО обязательно!")
@@ -261,6 +298,8 @@ def employees_page(page: ft.Page = None) -> ft.Column:
             employee.full_name = full_name
             employee.birth_date = datetime.strptime(birth_value, "%d.%m.%Y").date()
             employee.hire_date = datetime.strptime(hire_value, "%d.%m.%Y").date()
+            employee.guard_license_date = datetime.strptime(guard_license_value, "%d.%m.%Y").date() if guard_license_value and guard_license_value != "Не указано" else None
+            employee.guard_rank = int(guard_rank_value) if guard_rank_value else None
             employee.save()
             close_edit_dialog(None)
             refresh_table()
@@ -271,6 +310,8 @@ def employees_page(page: ft.Page = None) -> ft.Column:
                 edit_name,
                 edit_birth,
                 edit_hire,
+                edit_guard_license,
+                edit_guard_rank,
                 ft.Text(f"Ошибка: {str(ex)}", color=ft.Colors.RED)
             ], spacing=10)
         except Exception:
@@ -310,10 +351,12 @@ def employees_page(page: ft.Page = None) -> ft.Column:
     # Создаем DataTable
     employees_table = ft.DataTable(
         columns=[
-            ft.DataColumn(ft.Text("ФИО", width=300), on_sort=lambda _: on_sort("full_name")),
-            ft.DataColumn(ft.Text("Дата рождения", width=150), on_sort=lambda _: on_sort("birth_date")),
-            ft.DataColumn(ft.Text("Дата принятия", width=150), on_sort=lambda _: on_sort("hire_date")),
-            ft.DataColumn(ft.Text("Зарплата", width=150), on_sort=lambda _: on_sort("salary")),
+            ft.DataColumn(ft.Text("ФИО", width=250), on_sort=lambda _: on_sort("full_name")),
+            ft.DataColumn(ft.Text("Дата рождения", width=120), on_sort=lambda _: on_sort("birth_date")),
+            ft.DataColumn(ft.Text("Дата принятия", width=120), on_sort=lambda _: on_sort("hire_date")),
+            ft.DataColumn(ft.Text("Дата выдачи удостоверения", width=140)),
+            ft.DataColumn(ft.Text("Разряд", width=80)),
+            ft.DataColumn(ft.Text("Зарплата", width=120), on_sort=lambda _: on_sort("salary")),
         ],
         rows=[],
         horizontal_lines=ft.border.BorderSide(1, ft.Colors.OUTLINE),

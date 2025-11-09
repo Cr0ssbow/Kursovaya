@@ -30,6 +30,8 @@ class Employee(BaseModel):
     photo_path = CharField(max_length=500, null=True, verbose_name="Путь к фото")
     hire_date = DateField(verbose_name="Дата принятия на работу")
     termination_date = DateField(null=True, verbose_name="Дата увольнения")
+    guard_license_date = DateField(null=True, verbose_name="Дата выдачи удостоверения охранника")
+    guard_rank = IntegerField(null=True, verbose_name="Разряд охранника (1-6)")
     hourly_rate = DecimalField(max_digits=7, decimal_places=2, verbose_name="Почасовая ставка", default=0)
     hours_worked = IntegerField(verbose_name="Количество часов", default=0)
     salary = DecimalField(max_digits=10, decimal_places=2, verbose_name="Зарплата", default=0)
@@ -63,8 +65,8 @@ class Object(BaseModel):
 
 class Assignment(BaseModel):
     """Модель назначения сотрудника на объект"""
-    employee = ForeignKeyField(Employee, backref='assignments')
-    object = ForeignKeyField(Object, backref='assignments')
+    employee = ForeignKeyField(Employee, backref='assignments') # связь один ко многим employee (1) → (многоо) Assignment
+    object = ForeignKeyField(Object, backref='assignments') # связь один ко многим Object (1) → (многоо) Assignment
     date = DateField(verbose_name="Дата назначения")
     hours = IntegerField(verbose_name="Количество часов")
     hourly_rate = DecimalField(max_digits=7, decimal_places=2, verbose_name="Почасовая ставка")
@@ -98,6 +100,17 @@ def init_database():
         columns = [row[1] for row in cursor.fetchall()]
         if 'hourly_rate' not in columns:
             db.execute_sql('ALTER TABLE objects ADD COLUMN hourly_rate DECIMAL(7,2) DEFAULT 0')
+    except:
+        pass
+    
+    # Миграция: добавляем поля охранника к таблице employees
+    try:
+        cursor = db.execute_sql('PRAGMA table_info(employees)')
+        columns = [row[1] for row in cursor.fetchall()]
+        if 'guard_license_date' not in columns:
+            db.execute_sql('ALTER TABLE employees ADD COLUMN guard_license_date DATE')
+        if 'guard_rank' not in columns:
+            db.execute_sql('ALTER TABLE employees ADD COLUMN guard_rank INTEGER')
     except:
         pass
 

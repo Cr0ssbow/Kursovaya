@@ -2,9 +2,9 @@ import datetime
 import flet as ft
 import locale
 from database.models import Employee, Object, Assignment, db
-from peewee import OperationalError
+from peewee import *
 
-# Set locale for Russian month names
+# Русская локализация
 locale.setlocale(locale.LC_ALL, 'ru_RU.UTF-8')
 
 
@@ -13,7 +13,7 @@ def calendar_page(page: ft.Page):
     current_month_display = ft.Text("", size=24, weight=ft.FontWeight.BOLD)
     calendar_grid_container = ft.Column()
 
-    # Fetch employees and objects from the database
+    # Поиск сотрудника и объекта из дб
     employees = []
     objects = []
     try:
@@ -118,7 +118,7 @@ def calendar_page(page: ft.Page):
             ft.dropdown.Option("12"),
             ft.dropdown.Option("24")
         ],
-        value="12",
+        value="12", # ставка по умолчанию
         width=200,
     )
     
@@ -238,18 +238,17 @@ def calendar_page(page: ft.Page):
         first_day_of_month = datetime.date(year, month, 1)
         days_in_month = (datetime.date(year, month + 1, 1) - datetime.date(year, month, 1)).days if month < 12 else (datetime.date(year + 1, 1, 1) - datetime.date(year, 12, 1)).days
         
-        start_weekday = first_day_of_month.weekday() # Monday is 0, Sunday is 6
-        empty_slots = (start_weekday + 1) % 7 # Number of empty slots before the 1st day of the month if Sunday is the first day of the week
+        start_weekday = first_day_of_month.weekday()
+        empty_slots = (start_weekday + 1) % 7
 
         days = []
         for _ in range(empty_slots):
-            days.append(ft.Container(width=40, height=40)) # Empty containers for padding
+            days.append(ft.Container(width=40, height=40))
 
         for day in range(1, days_in_month + 1):
             current_date = datetime.date(year, month, day)
             days.append(create_day_button(day, current_date))
 
-        # Fill remaining slots to complete the last week
         while len(days) % 7 != 0:
             days.append(ft.Container(width=40, height=40))
 
@@ -312,7 +311,7 @@ def calendar_page(page: ft.Page):
         current_year = year
         update_calendar_view()
 
-    update_calendar_view() # Initial calendar render
+    update_calendar_view()
 
     calendar_content = ft.Column(
         [
