@@ -24,12 +24,25 @@ def salary_page(page: ft.Page = None) -> ft.Column:
         height=707
     )
     
+    # Поле поиска по ФИО
+    search_field = ft.TextField(
+        label="Поиск по ФИО",
+        width=200,
+        on_change=lambda e: refresh_salary_table()
+    )
+    
     def refresh_salary_table():
         """Обновляет данные зарплат за выбранный месяц"""
         try:
             if db.is_closed():
                 db.connect()
-            employees = Employee.select()
+            
+            # Фильтрация по ФИО
+            search_value = search_field.value.strip()
+            if search_value:
+                employees = Employee.select().where(Employee.full_name.contains(search_value))
+            else:
+                employees = Employee.select()
             
             salary_table.rows.clear()
             for employee in employees:
@@ -83,6 +96,7 @@ def salary_page(page: ft.Page = None) -> ft.Column:
                         ft.IconButton(ft.Icons.ARROW_LEFT, on_click=lambda e: change_month(-1)),
                         month_display,
                         ft.IconButton(ft.Icons.ARROW_RIGHT, on_click=lambda e: change_month(1)),
+                        search_field,
                     ], spacing=5),
                 ],
                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN,

@@ -7,6 +7,7 @@ from views.settings import settings_page, load_theme_from_db
 from views.calendar import calendar_page
 from views.objects import objects_page
 from views.salary import salary_page
+from views.shifts import shifts_page
 
 def main(page: ft.Page):
     page.window_width = 800
@@ -48,6 +49,13 @@ def main(page: ft.Page):
                 page.overlay.append(date_menu_dialog)
             
         elif selected_index == 5:
+            shifts_content, confirm_dialog = shifts_page(page)
+            content_container.content = shifts_content
+            
+            if confirm_dialog not in page.overlay:
+                page.overlay.append(confirm_dialog)
+            
+        elif selected_index == 6:
             content_container.content = salary_page(page)
 
         

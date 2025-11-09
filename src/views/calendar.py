@@ -9,11 +9,14 @@ locale.setlocale(locale.LC_ALL, 'ru_RU.UTF-8')
 
 
 def calendar_page(page: ft.Page):
+    # Отображение выбранной даты в верхней части страницы
     selected_date_text = ft.Text("Выберите дату", size=20)
+    # Отображение текущего месяца и года
     current_month_display = ft.Text("", size=24, weight=ft.FontWeight.BOLD)
+    # Контейнер для сетки календаря
     calendar_grid_container = ft.Column()
 
-    # Поиск сотрудника и объекта из дб
+    # Загрузка списков сотрудников и объектов из базы данных
     employees = []
     objects = []
     try:
@@ -37,18 +40,22 @@ def calendar_page(page: ft.Page):
     # Список найденных сотрудников
     search_results = ft.Column(visible=False)
     
+    # Функция поиска сотрудников по введенному тексту
     def search_employees(query):
+        # Проверка минимальной длины запроса (2 символа)
         if not query or len(query) < 2:
             search_results.visible = False
             page.update()
             return
             
-        # Поиск сотрудников по имени
+        # Фильтрация сотрудников по частичному совпадению имени
         filtered_employees = [emp for emp in employees if query.lower() in emp.full_name.lower()]
         
+        # Очистка списка результатов и добавление новых
         search_results.controls.clear()
         if filtered_employees:
-            for emp in filtered_employees[:5]:  # Показываем максимум 5 результатов
+            # Ограничение количества результатов (5 штук)
+            for emp in filtered_employees[:5]:
                 search_results.controls.append(
                     ft.ListTile(
                         title=ft.Text(emp.full_name),
@@ -58,14 +65,18 @@ def calendar_page(page: ft.Page):
                 )
             search_results.visible = True
         else:
+            # Отображение сообщения о том, что ничего не найдено
             search_results.controls.append(
                 ft.Text("Сотрудник не найден", color=ft.Colors.ERROR)
             )
             search_results.visible = True
         page.update()
     
+    # Функция выбора сотрудника из списка результатов
     def select_employee(employee):
+        # Заполнение поля поиска выбранным именем
         employee_search.value = employee.full_name
+        # Скрытие списка результатов
         search_results.visible = False
         page.update()
     
@@ -79,18 +90,22 @@ def calendar_page(page: ft.Page):
     # Список найденных объектов
     object_search_results = ft.Column(visible=False)
     
+    # Функция поиска объектов по введенному тексту
     def search_objects(query):
+        # Проверка минимальной длины запроса (2 символа)
         if not query or len(query) < 2:
             object_search_results.visible = False
             page.update()
             return
             
-        # Поиск объектов по названию
+        # Фильтрация объектов по частичному совпадению названия
         filtered_objects = [obj for obj in objects if query.lower() in obj.name.lower()]
         
+        # Очистка списка результатов и добавление новых
         object_search_results.controls.clear()
         if filtered_objects:
-            for obj in filtered_objects[:5]:  # Показываем максимум 5 результатов
+            # Ограничение количества результатов (5 штук)
+            for obj in filtered_objects[:5]:
                 object_search_results.controls.append(
                     ft.ListTile(
                         title=ft.Text(obj.name),
@@ -99,15 +114,20 @@ def calendar_page(page: ft.Page):
                 )
             object_search_results.visible = True
         else:
+            # Отображение сообщения о том, что ничего не найдено
             object_search_results.controls.append(
                 ft.Text("Объект не найден", color=ft.Colors.ERROR)
             )
             object_search_results.visible = True
         page.update()
     
+    # Функция выбора объекта из списка результатов
     def select_object(obj):
+        # Заполнение поля поиска выбранным названием
         object_search.value = obj.name
+        # Скрытие списка результатов
         object_search_results.visible = False
+        # Обновление информации о почасовой ставке и адресе
         hourly_rate_display.value = f"Почасовая ставка: {float(obj.hourly_rate):.2f} ₽"
         address_display.value = f"Адрес: {obj.address or 'не указан'}"
         page.update()
@@ -155,6 +175,7 @@ def calendar_page(page: ft.Page):
 
     def close_date_menu(e):
         date_menu.open = False
+        page.dialog = None
         page.update()
     
     selected_date = None
