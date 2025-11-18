@@ -18,10 +18,141 @@ def shifts2_page(page: ft.Page = None):
         actions=[ft.TextButton("Закрыть", on_click=lambda e: close_shifts_dialog())]
     )
     
+    # Диалог редактирования смены
+    edit_dialog = ft.AlertDialog(
+        modal=True,
+        title=ft.Text("Редактирование смены"),
+        content=ft.Column([], height=300, scroll=ft.ScrollMode.AUTO),
+        actions=[
+            ft.TextButton("Сохранить", on_click=lambda e: save_shift_changes()),
+            ft.TextButton("Удалить", on_click=lambda e: confirm_delete_shift(), style=ft.ButtonStyle(color=ft.Colors.RED)),
+            ft.TextButton("Отмена", on_click=lambda e: close_edit_dialog())
+        ]
+    )
+    
+    # Диалог подтверждения удаления
+    delete_confirm_dialog = ft.AlertDialog(
+        modal=True,
+        title=ft.Text("Подтвердите удаление"),
+        content=ft.Text("Вы уверены, что хотите удалить эту смену?"),
+        actions=[
+            ft.TextButton("Да", on_click=lambda e: delete_shift()),
+            ft.TextButton("Отмена", on_click=lambda e: close_delete_confirm())
+        ]
+    )
+    
     def close_shifts_dialog():
         shifts_dialog.open = False
         page.dialog = None
         page.update()
+    
+    def close_edit_dialog():
+        edit_dialog.open = False
+        page.dialog = None
+        page.update()
+    
+    def confirm_delete_shift():
+        page.dialog = delete_confirm_dialog
+        delete_confirm_dialog.open = True
+        page.update()
+    
+    def close_delete_confirm():
+        delete_confirm_dialog.open = False
+        page.dialog = edit_dialog
+        page.update()
+    
+    def delete_shift():
+        if current_assignment:
+            try:
+                if db.is_closed():
+                    db.connect()
+                current_assignment.delete_instance()
+                delete_confirm_dialog.open = False
+                edit_dialog.open = False
+                page.dialog = None
+                update_calendar()
+            except Exception as e:
+                print(f"Ошибка удаления: {e}")
+            finally:
+                if not db.is_closed():
+                    db.close()
+    
+    current_assignment = None
+    absent_checkbox = ft.Checkbox(label="Прогул", on_change=lambda e: toggle_absent_comment())
+    absent_comment_field = ft.TextField(label="Комментарий к прогулу", visible=False, multiline=True)
+    bonus_amount_field = ft.TextField(label="Сумма премии", on_change=lambda e: toggle_bonus_comment())
+    bonus_comment_field = ft.TextField(label="Комментарий к премии", visible=False, multiline=True)
+    
+    def toggle_absent_comment():
+        absent_comment_field.visible = absent_checkbox.value
+        # Скрываем поля премии если стоит галочка прогула
+        bonus_amount_field.visible = not absent_checkbox.value
+        if absent_checkbox.value:
+            bonus_comment_field.visible = False
+        else:
+            try:
+                bonus_amount = float(bonus_amount_field.value or "0")
+                bonus_comment_field.visible = bonus_amount > 0
+            except:
+                bonus_comment_field.visible = False
+        page.update()
+    
+    def toggle_bonus_comment():
+        try:
+            bonus_amount = float(bonus_amount_field.value or "0")
+            bonus_comment_field.visible = bonus_amount > 0 and not absent_checkbox.value
+        except:
+            bonus_comment_field.visible = False
+        page.update()
+    
+    def edit_shift(assignment):
+        nonlocal current_assignment
+        current_assignment = assignment
+        
+        absent_checkbox.value = assignment.is_absent
+        absent_comment_field.value = assignment.absent_comment or ""
+        absent_comment_field.visible = assignment.is_absent
+        bonus_amount_field.value = str(float(assignment.bonus_amount))
+        bonus_comment_field.value = assignment.bonus_comment or ""
+        # Поля премии скрываются если стоит галочка прогула
+        bonus_amount_field.visible = not assignment.is_absent
+        bonus_comment_field.visible = not assignment.is_absent and float(assignment.bonus_amount) > 0
+        
+        edit_dialog.content.controls = [
+            ft.Text(f"Сотрудник: {assignment.employee.full_name}", weight="bold"),
+            ft.Text(f"Объект: {assignment.object.name}"),
+            ft.Text(f"Дата: {assignment.date.strftime('%d.%m.%Y')}"),
+            ft.Divider(),
+            absent_checkbox,
+            absent_comment_field,
+            bonus_amount_field,
+            bonus_comment_field
+        ]
+        
+        page.dialog = edit_dialog
+        edit_dialog.open = True
+        page.update()
+    
+    def save_shift_changes():
+        if current_assignment:
+            try:
+                if db.is_closed():
+                    db.connect()
+                
+                current_assignment.is_absent = absent_checkbox.value
+                current_assignment.absent_comment = absent_comment_field.value if absent_checkbox.value else None
+                current_assignment.bonus_amount = float(bonus_amount_field.value or "0")
+                current_assignment.bonus_comment = bonus_comment_field.value if float(bonus_amount_field.value or "0") > 0 else None
+                current_assignment.save()
+                
+                close_edit_dialog()
+                update_calendar()
+                
+            except Exception as e:
+                print(f"Ошибка сохранения: {e}")
+            finally:
+                if not db.is_closed():
+                    db.close()
     
     def show_shifts_for_date(date_obj):
         try:
@@ -37,14 +168,28 @@ def shifts2_page(page: ft.Page = None):
             
             if assignments:
                 for assignment in assignments:
+                    status_text = ""
+                    if assignment.is_absent:
+                        status_text = " (Прогул)"
+                    elif float(assignment.bonus_amount) > 0:
+                        status_text = f" (Премия: {assignment.bonus_amount} ₽)"
+                    
                     shifts_dialog.content.controls.append(
                         ft.Card(
                             content=ft.Container(
                                 content=ft.Column([
-                                    ft.Text(f"Сотрудник: {assignment.employee.full_name}", weight="bold"),
-                                    ft.Text(f"Объект: {assignment.object.name}"),
-                                    ft.Text(f"Часы: {assignment.hours}"),
-                                    ft.Text(f"Ставка: {assignment.hourly_rate} ₽/час")
+                                    ft.Row([
+                                        ft.Column([
+                                            ft.Text(f"Сотрудник: {assignment.employee.full_name}{status_text}", weight="bold"),
+                                            ft.Text(f"Объект: {assignment.object.name}"),
+                                            ft.Text(f"Часы: {assignment.hours}"),
+                                            ft.Text(f"Ставка: {assignment.hourly_rate} ₽/час")
+                                        ], expand=True),
+                                        ft.IconButton(
+                                            icon=ft.Icons.EDIT,
+                                            on_click=lambda e, a=assignment: edit_shift(a)
+                                        )
+                                    ])
                                 ], spacing=5),
                                 padding=10
                             )
@@ -162,5 +307,11 @@ def shifts2_page(page: ft.Page = None):
         ], alignment=ft.MainAxisAlignment.CENTER),
         calendar_grid_container
     ], spacing=10, expand=True, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
+    
+    # Добавляем диалоги в overlay страницы
+    if edit_dialog not in page.overlay:
+        page.overlay.append(edit_dialog)
+    if delete_confirm_dialog not in page.overlay:
+        page.overlay.append(delete_confirm_dialog)
     
     return shifts_content, shifts_dialog

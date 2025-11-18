@@ -45,8 +45,19 @@ class Employee(BaseModel):
         return self.termination_date is None
 
     def calc_salary(self):
-        """Расчет зарплаты: часы * ставка"""
-        return float(self.hourly_rate) * self.hours_worked
+        """Расчет зарплаты с учетом прогулов и премий"""
+        total_salary = 0
+        total_hours = 0
+        
+        for assignment in self.assignments:
+            if not assignment.is_absent:  # Не учитываем прогулы
+                total_salary += float(assignment.hourly_rate) * assignment.hours
+                total_hours += assignment.hours
+            
+            # Добавляем премии
+            total_salary += float(assignment.bonus_amount)
+        
+        return total_salary, total_hours
 
     def delete_employee(self):
         """Удаление сотрудника из базы данных"""
@@ -65,11 +76,15 @@ class Object(BaseModel):
 
 class Assignment(BaseModel):
     """Модель назначения сотрудника на объект"""
-    employee = ForeignKeyField(Employee, backref='assignments') # связь один ко многим employee (1) → (многоо) Assignment
-    object = ForeignKeyField(Object, backref='assignments') # связь один ко многим Object (1) → (многоо) Assignment
+    employee = ForeignKeyField(Employee, backref='assignments', on_delete='CASCADE') # связь один ко многим employee (1) → (многоо) Assignment
+    object = ForeignKeyField(Object, backref='assignments', on_delete='CASCADE') # связь один ко многим Object (1) → (многоо) Assignment
     date = DateField(verbose_name="Дата назначения")
     hours = IntegerField(verbose_name="Количество часов")
     hourly_rate = DecimalField(max_digits=7, decimal_places=2, verbose_name="Почасовая ставка")
+    is_absent = BooleanField(default=False, verbose_name="Прогул")
+    absent_comment = TextField(null=True, verbose_name="Комментарий к прогулу")
+    bonus_amount = DecimalField(max_digits=7, decimal_places=2, default=0, verbose_name="Сумма премии")
+    bonus_comment = TextField(null=True, verbose_name="Комментарий к премии")
     created_at = DateTimeField(default=datetime.now)
 
     class Meta:
@@ -111,6 +126,21 @@ def init_database():
             db.execute_sql('ALTER TABLE employees ADD COLUMN guard_license_date DATE')
         if 'guard_rank' not in columns:
             db.execute_sql('ALTER TABLE employees ADD COLUMN guard_rank INTEGER')
+    except:
+        pass
+    
+    # Миграция: добавляем поля премий и прогулов к таблице assignments
+    try:
+        cursor = db.execute_sql('PRAGMA table_info(assignments)')
+        columns = [row[1] for row in cursor.fetchall()]
+        if 'is_absent' not in columns:
+            db.execute_sql('ALTER TABLE assignments ADD COLUMN is_absent BOOLEAN DEFAULT 0')
+        if 'absent_comment' not in columns:
+            db.execute_sql('ALTER TABLE assignments ADD COLUMN absent_comment TEXT')
+        if 'bonus_amount' not in columns:
+            db.execute_sql('ALTER TABLE assignments ADD COLUMN bonus_amount DECIMAL(7,2) DEFAULT 0')
+        if 'bonus_comment' not in columns:
+            db.execute_sql('ALTER TABLE assignments ADD COLUMN bonus_comment TEXT')
     except:
         pass
 

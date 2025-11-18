@@ -52,7 +52,7 @@ def salary_page(page: ft.Page = None) -> ft.Column:
                     (Assignment.date.month == selected_month) &
                     (Assignment.date.year == selected_year)
                 )
-                total_salary = sum(float(a.hourly_rate) * a.hours for a in assignments)
+                total_salary = sum(float(a.hourly_rate) * a.hours + float(a.bonus_amount) for a in assignments if not a.is_absent)
                 
                 salary_table.rows.append(
                     ft.DataRow(

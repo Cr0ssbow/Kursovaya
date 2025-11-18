@@ -82,11 +82,11 @@ def main(page: ft.Page):
                 page.overlay.append(date_menu_dialog)
             
         elif selected_index == 5:
-            shifts_content, confirm_dialog = shifts2_page(page)
+            shifts_content, shifts_dialog = shifts2_page(page)
             content_container.content = shifts_content
             
-            if confirm_dialog not in page.overlay:
-                page.overlay.append(confirm_dialog)
+            if shifts_dialog not in page.overlay:
+                page.overlay.append(shifts_dialog)
             
         elif selected_index == 6:
             content_container.content = salary_page(page)
