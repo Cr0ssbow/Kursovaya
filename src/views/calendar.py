@@ -147,7 +147,7 @@ def calendar_page(page: ft.Page):
 
     date_menu = ft.AlertDialog(
         modal=True,
-        title=ft.Text("Действия с датой"),
+        title=ft.Text("Выставление смены на дату"),
         content=ft.Column([
             ft.Text(""), # This will be updated with the selected date
             employee_search,
