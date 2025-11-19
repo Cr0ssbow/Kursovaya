@@ -35,6 +35,7 @@ class Employee(BaseModel):
     hourly_rate = DecimalField(max_digits=7, decimal_places=2, verbose_name="Почасовая ставка", default=0)
     hours_worked = IntegerField(verbose_name="Количество часов", default=0)
     salary = DecimalField(max_digits=10, decimal_places=2, verbose_name="Зарплата", default=0)
+    payment_method = CharField(max_length=20, default="на карту", verbose_name="Способ выдачи зарплаты")
     created_at = DateTimeField(default=datetime.now)
     
     class Meta:
@@ -45,7 +46,7 @@ class Employee(BaseModel):
         return self.termination_date is None
 
     def calc_salary(self):
-        """Расчет зарплаты с учетом прогулов и премий"""
+        """Расчет зарплаты с учетом прогулов, премий и удержаний"""
         total_salary = 0
         total_hours = 0
         
@@ -54,8 +55,8 @@ class Employee(BaseModel):
                 total_salary += float(assignment.hourly_rate) * assignment.hours
                 total_hours += assignment.hours
             
-            # Добавляем премии
-            total_salary += float(assignment.bonus_amount)
+            # Добавляем премии и вычитаем удержания
+            total_salary += float(assignment.bonus_amount) - float(assignment.deduction_amount)
         
         return total_salary, total_hours
 
@@ -83,6 +84,7 @@ class Assignment(BaseModel):
     hourly_rate = DecimalField(max_digits=7, decimal_places=2, verbose_name="Почасовая ставка")
     is_absent = BooleanField(default=False, verbose_name="Прогул")
     absent_comment = TextField(null=True, verbose_name="Комментарий к прогулу")
+    deduction_amount = DecimalField(max_digits=7, decimal_places=2, default=0, verbose_name="Сумма удержания")
     bonus_amount = DecimalField(max_digits=7, decimal_places=2, default=0, verbose_name="Сумма премии")
     bonus_comment = TextField(null=True, verbose_name="Комментарий к премии")
     created_at = DateTimeField(default=datetime.now)
@@ -96,18 +98,7 @@ def init_database():
     db.connect()
     db.create_tables([Employee, Settings, Object, Assignment], safe=True)
     
-    # Миграция: добавляем null=True к полям дат
-    try:
-        db.execute_sql('PRAGMA table_info(employees)')
-        # Пересоздаем таблицу с новой структурой
-        db.execute_sql('DROP TABLE IF EXISTS employees_backup')
-        db.execute_sql('ALTER TABLE employees RENAME TO employees_backup')
-        db.create_tables([Employee], safe=False)
-        db.execute_sql('INSERT INTO employees (id, full_name, birth_date, photo_path, hire_date, termination_date, hourly_rate, hours_worked, salary, created_at) SELECT id, full_name, birth_date, photo_path, hire_date, termination_date, hourly_rate, hours_worked, salary, created_at FROM employees_backup')
-        db.execute_sql('DROP TABLE employees_backup')
-    except:
-        pass
-    
+
     # Миграция: добавляем hourly_rate к таблице objects
     try:
         # Проверяем, есть ли уже поле hourly_rate
@@ -141,6 +132,17 @@ def init_database():
             db.execute_sql('ALTER TABLE assignments ADD COLUMN bonus_amount DECIMAL(7,2) DEFAULT 0')
         if 'bonus_comment' not in columns:
             db.execute_sql('ALTER TABLE assignments ADD COLUMN bonus_comment TEXT')
+        if 'deduction_amount' not in columns:
+            db.execute_sql('ALTER TABLE assignments ADD COLUMN deduction_amount DECIMAL(7,2) DEFAULT 0')
+    except:
+        pass
+    
+    # Миграция: добавляем поле способа выдачи зарплаты
+    try:
+        cursor = db.execute_sql('PRAGMA table_info(employees)')
+        columns = [row[1] for row in cursor.fetchall()]
+        if 'payment_method' not in columns:
+            db.execute_sql('ALTER TABLE employees ADD COLUMN payment_method VARCHAR(20) DEFAULT "на карту"')
     except:
         pass
 

@@ -78,14 +78,16 @@ def shifts2_page(page: ft.Page = None):
                     db.close()
     
     current_assignment = None
-    absent_checkbox = ft.Checkbox(label="Прогул", on_change=lambda e: toggle_absent_comment())
-    absent_comment_field = ft.TextField(label="Комментарий к прогулу", visible=False, multiline=True)
+    absent_checkbox = ft.Checkbox(label="Пропуск", on_change=lambda e: toggle_absent_comment())
+    absent_comment_field = ft.TextField(label="Комментарий к проспуску", visible=False, multiline=True)
+    deduction_amount_field = ft.TextField(label="Сумма удержания", visible=False)
     bonus_amount_field = ft.TextField(label="Сумма премии", on_change=lambda e: toggle_bonus_comment())
     bonus_comment_field = ft.TextField(label="Комментарий к премии", visible=False, multiline=True)
     
     def toggle_absent_comment():
         absent_comment_field.visible = absent_checkbox.value
-        # Скрываем поля премии если стоит галочка прогула
+        deduction_amount_field.visible = absent_checkbox.value
+        # Скрываем поля премии если стоит галочка пропуска
         bonus_amount_field.visible = not absent_checkbox.value
         if absent_checkbox.value:
             bonus_comment_field.visible = False
@@ -112,9 +114,11 @@ def shifts2_page(page: ft.Page = None):
         absent_checkbox.value = assignment.is_absent
         absent_comment_field.value = assignment.absent_comment or ""
         absent_comment_field.visible = assignment.is_absent
+        deduction_amount_field.value = str(float(assignment.deduction_amount))
+        deduction_amount_field.visible = assignment.is_absent
         bonus_amount_field.value = str(float(assignment.bonus_amount))
         bonus_comment_field.value = assignment.bonus_comment or ""
-        # Поля премии скрываются если стоит галочка прогула
+        # Поля премии скрываются если стоит галочка пропуска
         bonus_amount_field.visible = not assignment.is_absent
         bonus_comment_field.visible = not assignment.is_absent and float(assignment.bonus_amount) > 0
         
@@ -124,6 +128,7 @@ def shifts2_page(page: ft.Page = None):
             ft.Text(f"Дата: {assignment.date.strftime('%d.%m.%Y')}"),
             ft.Divider(),
             absent_checkbox,
+            deduction_amount_field,
             absent_comment_field,
             bonus_amount_field,
             bonus_comment_field
@@ -141,6 +146,7 @@ def shifts2_page(page: ft.Page = None):
                 
                 current_assignment.is_absent = absent_checkbox.value
                 current_assignment.absent_comment = absent_comment_field.value if absent_checkbox.value else None
+                current_assignment.deduction_amount = float(deduction_amount_field.value or "0") if absent_checkbox.value else 0
                 current_assignment.bonus_amount = float(bonus_amount_field.value or "0")
                 current_assignment.bonus_comment = bonus_comment_field.value if float(bonus_amount_field.value or "0") > 0 else None
                 current_assignment.save()
@@ -170,7 +176,7 @@ def shifts2_page(page: ft.Page = None):
                 for assignment in assignments:
                     status_text = ""
                     if assignment.is_absent:
-                        status_text = " (Прогул)"
+                        status_text = " (Пропуск)"
                     elif float(assignment.bonus_amount) > 0:
                         status_text = f" (Премия: {assignment.bonus_amount} ₽)"
                     

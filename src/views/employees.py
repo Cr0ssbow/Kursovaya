@@ -66,6 +66,7 @@ def employees_page(page: ft.Page = None) -> ft.Column:
     hire_field = ft.TextField(label="Дата принятия (дд.мм.гггг)", width=180, on_change=format_date_input, input_filter=ft.InputFilter(regex_string=r"[0-9.]", allow=True), max_length=10)
     guard_license_field = ft.TextField(label="Дата выдачи УЧО (дд.мм.гггг)", width=250, on_change=format_date_input, input_filter=ft.InputFilter(regex_string=r"[0-9.]", allow=True), max_length=10)
     guard_rank_field = ft.Dropdown(label="Разряд охранника", width=180, options=[ft.dropdown.Option(str(i)) for i in range(3, 7)])
+    payment_method_field = ft.Dropdown(label="Способ выдачи зарплаты", width=250, options=[ft.dropdown.Option("на карту"), ft.dropdown.Option("на руки")], value="на карту")
 
     def show_add_dialog(e):
         add_dialog.title = ft.Text("Добавить сотрудника")
@@ -75,6 +76,7 @@ def employees_page(page: ft.Page = None) -> ft.Column:
             hire_field,
             guard_license_field,
             guard_rank_field,
+            payment_method_field,
         ], spacing=10)
         add_dialog.actions = [
             ft.TextButton("Сохранить", on_click=save_employee),
@@ -100,6 +102,7 @@ def employees_page(page: ft.Page = None) -> ft.Column:
             hire_value = hire_field.value.strip()
             guard_license_value = guard_license_field.value.strip()
             guard_rank_value = guard_rank_field.value
+            payment_method_value = payment_method_field.value
             
             if not full_name:
                 raise ValueError("ФИО обязательно!")
@@ -118,7 +121,8 @@ def employees_page(page: ft.Page = None) -> ft.Column:
                 birth_date=birth_date,
                 hire_date=hire_date,
                 guard_license_date=guard_license_date,
-                guard_rank=guard_rank
+                guard_rank=guard_rank,
+                payment_method=payment_method_value or "на карту"
             )
             close_add_dialog(e)
             refresh_table()
@@ -131,6 +135,7 @@ def employees_page(page: ft.Page = None) -> ft.Column:
                 hire_field,
                 guard_license_field,
                 guard_rank_field,
+                payment_method_field,
                 ft.Text(f"Ошибка: {str(ex)}", color=ft.Colors.RED)
             ], spacing=10)
             if page:
@@ -204,6 +209,7 @@ def employees_page(page: ft.Page = None) -> ft.Column:
     edit_hire = ft.TextField(label="Дата принятия (дд.мм.гггг)", width=180, on_change=format_date_input, input_filter=ft.InputFilter(regex_string=r"[0-9.]", allow=True), max_length=10)
     edit_guard_license = ft.TextField(label="Дата выдачи удостоверения (дд.мм.гггг)", width=250, on_change=format_date_input, input_filter=ft.InputFilter(regex_string=r"[0-9.]", allow=True), max_length=10)
     edit_guard_rank = ft.Dropdown(label="Разряд охранника", width=180, options=[ft.dropdown.Option(str(i)) for i in range(3, 7)])
+    edit_payment_method = ft.Dropdown(label="Способ выдачи зарплаты", width=250, options=[ft.dropdown.Option("на карту"), ft.dropdown.Option("на руки")])
 
     # Диалог подтверждения удаления
     confirm_delete_dialog = ft.AlertDialog(
@@ -243,6 +249,7 @@ def employees_page(page: ft.Page = None) -> ft.Column:
         edit_hire.value = format_date(employee.hire_date)
         edit_guard_license.value = format_date(employee.guard_license_date) if hasattr(employee, 'guard_license_date') else ""
         edit_guard_rank.value = str(employee.guard_rank) if hasattr(employee, 'guard_rank') and employee.guard_rank else None
+        edit_payment_method.value = getattr(employee, 'payment_method', 'на карту')
         edit_dialog.title = ft.Text(f"Редактировать сотрудника")
         edit_dialog.content = ft.Column([
             edit_name,
@@ -250,6 +257,7 @@ def employees_page(page: ft.Page = None) -> ft.Column:
             edit_hire,
             edit_guard_license,
             edit_guard_rank,
+            edit_payment_method,
         ], spacing=10)
         edit_dialog.actions = [
             ft.TextButton("Сохранить", on_click=lambda e, emp=employee: save_edit_employee(emp)),
@@ -275,6 +283,7 @@ def employees_page(page: ft.Page = None) -> ft.Column:
             hire_value = edit_hire.value.strip()
             guard_license_value = edit_guard_license.value.strip()
             guard_rank_value = edit_guard_rank.value
+            payment_method_value = edit_payment_method.value
             
             if not full_name:
                 raise ValueError("ФИО обязательно!")
@@ -288,6 +297,7 @@ def employees_page(page: ft.Page = None) -> ft.Column:
             employee.hire_date = datetime.strptime(hire_value, "%d.%m.%Y").date()
             employee.guard_license_date = datetime.strptime(guard_license_value, "%d.%m.%Y").date() if guard_license_value and guard_license_value != "Не указано" else None
             employee.guard_rank = int(guard_rank_value) if guard_rank_value else None
+            employee.payment_method = payment_method_value or 'на карту'
             employee.save()
             close_edit_dialog(None)
             refresh_table()
@@ -300,6 +310,7 @@ def employees_page(page: ft.Page = None) -> ft.Column:
                 edit_hire,
                 edit_guard_license,
                 edit_guard_rank,
+                edit_payment_method,
                 ft.Text(f"Ошибка: {str(ex)}", color=ft.Colors.RED)
             ], spacing=10)
         except Exception:
