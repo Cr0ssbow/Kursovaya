@@ -4,9 +4,9 @@ from menu.drawer import drawer
 from views.home import home_page
 from views.employees import employees_page
 from views.settings import settings_page, load_theme_from_db
-from views.calendar import calendar_page
+import os
 from views.objects import objects_page
-from views.salary import salary_page
+
 from views.shifts2 import shifts2_page
 from views.statistics import statistics_page
 from database.models import Employee
@@ -24,13 +24,39 @@ def check_birthdays():
     return birthday_employees
 
 def main(page: ft.Page):
+    page.title = "ЧОП Легион - Система учёта сотрудников"
+    icon_path = os.path.abspath("D:/Kursovaya/src/assets/legion.ico")
+    page.window.icon = icon_path
     page.window_width = 800
     page.window_height = 600
     page.window_min_width = 800
     page.window_min_height = 600
     # Загружаем тему из БД при старте
     theme = load_theme_from_db()
-    page.theme_mode = ft.ThemeMode.DARK if theme == "dark" else ft.ThemeMode.LIGHT
+    
+    if theme == "dark":
+        page.theme_mode = ft.ThemeMode.DARK
+    elif theme == "dark_green":
+        page.theme_mode = ft.ThemeMode.DARK
+        page.theme = ft.Theme(color_scheme_seed=ft.Colors.GREEN)
+    elif theme == "purple":
+        page.theme_mode = ft.ThemeMode.DARK
+        page.theme = ft.Theme(color_scheme_seed=ft.Colors.PURPLE)
+    elif theme == "amber":
+        page.theme_mode = ft.ThemeMode.LIGHT
+        page.theme = ft.Theme(color_scheme_seed=ft.Colors.AMBER)
+    elif theme == "brown":
+        page.theme_mode = ft.ThemeMode.DARK
+        page.theme = ft.Theme(color_scheme_seed=ft.Colors.BROWN)
+    elif theme == "deep_orange":
+        page.theme_mode = ft.ThemeMode.LIGHT
+        page.theme = ft.Theme(color_scheme_seed=ft.Colors.DEEP_ORANGE)
+    elif theme == "light_green":
+        page.theme_mode = ft.ThemeMode.LIGHT
+        page.theme = ft.Theme(color_scheme_seed=ft.Colors.LIGHT_GREEN)
+    else:
+        page.theme_mode = ft.ThemeMode.LIGHT
+        page.theme = None
     
     # Проверяем дни рождения при запуске
     birthday_employees = check_birthdays()
@@ -75,23 +101,13 @@ def main(page: ft.Page):
             content_container.content = objects_page(page)
 
         elif selected_index == 4:
-            calendar_content, date_menu_dialog = calendar_page(page)
-            content_container.content = calendar_content
-            
-            if date_menu_dialog not in page.overlay:
-                page.overlay.append(date_menu_dialog)
-            
-        elif selected_index == 5:
             shifts_content, shifts_dialog = shifts2_page(page)
             content_container.content = shifts_content
             
             if shifts_dialog not in page.overlay:
                 page.overlay.append(shifts_dialog)
             
-        elif selected_index == 6:
-            content_container.content = salary_page(page)
-            
-        elif selected_index == 7:
+        elif selected_index == 5:
             content_container.content = statistics_page(page)
 
         
@@ -110,7 +126,7 @@ def main(page: ft.Page):
                         icon=ft.Icons.MENU,
                         on_click=lambda e: page.open(page.drawer),
                     ),
-                    ft.Text("Моё приложение", size=20, weight="bold"),
+                    ft.Text("Система учёта сотрудников ЧОП Легион", size=20, weight="bold"),
                 ],
                 alignment=ft.MainAxisAlignment.START,
             ),
