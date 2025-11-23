@@ -63,7 +63,20 @@ def employees_page(page: ft.Page = None) -> ft.Column:
     add_dialog = ft.AlertDialog(modal=True)
     name_field = ft.TextField(label="ФИО", width=300)
     birth_field = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=180, on_change=format_date_input, max_length=10)
-    hire_field = ft.TextField(label="Дата принятия (дд.мм.гггг)", width=180, on_change=format_date_input, max_length=10)
+    def format_certificate_input(e):
+        value = e.control.value.upper().replace("№", "").replace(" ", "")
+        if len(value) > 0 and value[0].isalpha():
+            letter = value[0]
+            numbers = ''.join(filter(str.isdigit, value[1:]))[:6]
+            if numbers:
+                e.control.value = f"{letter}№ {numbers}"
+            else:
+                e.control.value = f"{letter}№ "
+        elif len(value) > 0 and not value[0].isalpha():
+            e.control.value = ""
+        page.update()
+    
+    certificate_field = ft.TextField(label="Номер удостоверения (буква№ 000000)", width=200, max_length=9, on_change=format_certificate_input)
     guard_license_field = ft.TextField(label="Дата выдачи УЧО (дд.мм.гггг)", width=250, on_change=format_date_input, max_length=10)
     medical_exam_field = ft.TextField(label="Дата прохождения медкомиссии (дд.мм.гггг)", width=250, on_change=format_date_input, max_length=10)
     periodic_check_field = ft.TextField(label="Дата прохождения периодической проверки (дд.мм.гггг)", width=250, on_change=format_date_input, max_length=10)
@@ -75,7 +88,7 @@ def employees_page(page: ft.Page = None) -> ft.Column:
         add_dialog.content = ft.Column([
             name_field,
             birth_field,
-            hire_field,
+            certificate_field,
             guard_license_field,
             medical_exam_field,
             periodic_check_field,
@@ -103,7 +116,7 @@ def employees_page(page: ft.Page = None) -> ft.Column:
         try:
             full_name = name_field.value.strip()
             birth_value = birth_field.value.strip()
-            hire_value = hire_field.value.strip()
+            certificate_value = certificate_field.value.strip()
             guard_license_value = guard_license_field.value.strip()
             guard_rank_value = guard_rank_field.value
             medical_exam_value = medical_exam_field.value.strip()
@@ -114,11 +127,11 @@ def employees_page(page: ft.Page = None) -> ft.Column:
                 raise ValueError("ФИО обязательно!")
             if not birth_value:
                 raise ValueError("Дата рождения обязательна!")
-            if not hire_value:
-                raise ValueError("Дата принятия на работу обязательна!")
+            if certificate_value and not (len(certificate_value) == 9 and certificate_value[0].isalpha() and certificate_value[1:3] == '№ ' and certificate_value[3:].isdigit()):
+                raise ValueError("Номер удостоверения должен быть в формате: буква№ 000000!")
             
             birth_date = datetime.strptime(birth_value, "%d.%m.%Y").date()
-            hire_date = datetime.strptime(hire_value, "%d.%m.%Y").date()
+
             guard_license_date = datetime.strptime(guard_license_value, "%d.%m.%Y").date() if guard_license_value else None
             guard_rank = int(guard_rank_value) if guard_rank_value else None
             medical_exam_date = datetime.strptime(medical_exam_value, "%d.%m.%Y").date() if medical_exam_value else None
@@ -127,7 +140,7 @@ def employees_page(page: ft.Page = None) -> ft.Column:
             Employee.create(
                 full_name=full_name,
                 birth_date=birth_date,
-                hire_date=hire_date,
+                certificate_number=certificate_value or None,
                 guard_license_date=guard_license_date,
                 guard_rank=guard_rank,
                 medical_exam_date=medical_exam_date,
@@ -142,7 +155,7 @@ def employees_page(page: ft.Page = None) -> ft.Column:
             add_dialog.content = ft.Column([
                 name_field,
                 birth_field,
-                hire_field,
+                certificate_field,
                 guard_license_field,
                 medical_exam_field,
                 periodic_check_field,
@@ -169,8 +182,8 @@ def employees_page(page: ft.Page = None) -> ft.Column:
                 return emp.full_name
             elif sort_column == "birth_date":
                 return emp.birth_date
-            elif sort_column == "hire_date":
-                return emp.hire_date
+            elif sort_column == "certificate_number":
+                return emp.certificate_number or ""
             elif sort_column == "salary":
                 return float(emp.salary)
             return emp.full_name
@@ -193,7 +206,7 @@ def employees_page(page: ft.Page = None) -> ft.Column:
                     cells=[
                         ft.DataCell(ft.Text(employee.full_name), on_tap=lambda e, emp=employee: show_edit_dialog(emp)),
                         ft.DataCell(ft.Text(format_date(employee.birth_date))),
-                        ft.DataCell(ft.Text(format_date(employee.hire_date))),
+                        ft.DataCell(ft.Text(getattr(employee, 'certificate_number', '') or 'Не указано')),
                         ft.DataCell(ft.Text(guard_license_text)),
                         ft.DataCell(ft.Text(guard_rank_text)),
                         ft.DataCell(ft.Text(medical_exam_text)),
@@ -222,7 +235,20 @@ def employees_page(page: ft.Page = None) -> ft.Column:
     edit_dialog = ft.AlertDialog(modal=True)
     edit_name = ft.TextField(label="ФИО", width=300)
     edit_birth = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=180, on_change=format_date_input, max_length=10)
-    edit_hire = ft.TextField(label="Дата принятия (дд.мм.гггг)", width=180, on_change=format_date_input, max_length=10)
+    def format_edit_certificate_input(e):
+        value = e.control.value.upper().replace("№", "").replace(" ", "")
+        if len(value) > 0 and value[0].isalpha():
+            letter = value[0]
+            numbers = ''.join(filter(str.isdigit, value[1:]))[:6]
+            if numbers:
+                e.control.value = f"{letter}№ {numbers}"
+            else:
+                e.control.value = f"{letter}№ "
+        elif len(value) > 0 and not value[0].isalpha():
+            e.control.value = ""
+        page.update()
+    
+    edit_certificate = ft.TextField(label="Номер удостоверения (буква№ 000000)", width=200, max_length=9, on_change=format_edit_certificate_input)
     edit_guard_license = ft.TextField(label="Дата выдачи удостоверения (дд.мм.гггг)", width=250, on_change=format_date_input, max_length=10)
     edit_guard_rank = ft.Dropdown(label="Разряд охранника", width=180, options=[ft.dropdown.Option(str(i)) for i in range(3, 7)])
     edit_medical_exam = ft.TextField(label="Дата прохождения медкомиссии (дд.мм.гггг)", width=250, on_change=format_date_input, max_length=10)
@@ -264,7 +290,7 @@ def employees_page(page: ft.Page = None) -> ft.Column:
     def show_edit_dialog(employee):
         edit_name.value = employee.full_name
         edit_birth.value = format_date(employee.birth_date)
-        edit_hire.value = format_date(employee.hire_date)
+        edit_certificate.value = getattr(employee, 'certificate_number', '') or ''
         edit_guard_license.value = format_date(employee.guard_license_date) if hasattr(employee, 'guard_license_date') else ""
         edit_guard_rank.value = str(employee.guard_rank) if hasattr(employee, 'guard_rank') and employee.guard_rank else None
         edit_medical_exam.value = format_date(employee.medical_exam_date) if hasattr(employee, 'medical_exam_date') else ""
@@ -274,7 +300,7 @@ def employees_page(page: ft.Page = None) -> ft.Column:
         edit_dialog.content = ft.Column([
             edit_name,
             edit_birth,
-            edit_hire,
+            edit_certificate,
             edit_guard_license,
             edit_medical_exam,
             edit_periodic_check,
@@ -302,7 +328,7 @@ def employees_page(page: ft.Page = None) -> ft.Column:
         try:
             full_name = edit_name.value.strip()
             birth_value = edit_birth.value.strip()
-            hire_value = edit_hire.value.strip()
+            certificate_value = edit_certificate.value.strip()
             guard_license_value = edit_guard_license.value.strip()
             guard_rank_value = edit_guard_rank.value
             medical_exam_value = edit_medical_exam.value.strip()
@@ -313,12 +339,12 @@ def employees_page(page: ft.Page = None) -> ft.Column:
                 raise ValueError("ФИО обязательно!")
             if not birth_value or birth_value == "Не указано":
                 raise ValueError("Дата рождения обязательна!")
-            if not hire_value or hire_value == "Не указано":
-                raise ValueError("Дата принятия на работу обязательна!")
+            if certificate_value and not (len(certificate_value) == 9 and certificate_value[0].isalpha() and certificate_value[1:3] == '№ ' and certificate_value[3:].isdigit()):
+                raise ValueError("Номер удостоверения должен быть в формате: буква№ 000000!")
             
             employee.full_name = full_name
             employee.birth_date = datetime.strptime(birth_value, "%d.%m.%Y").date()
-            employee.hire_date = datetime.strptime(hire_value, "%d.%m.%Y").date()
+            employee.certificate_number = certificate_value or None
             employee.guard_license_date = datetime.strptime(guard_license_value, "%d.%m.%Y").date() if guard_license_value and guard_license_value != "Не указано" else None
             employee.guard_rank = int(guard_rank_value) if guard_rank_value else None
             employee.medical_exam_date = datetime.strptime(medical_exam_value, "%d.%m.%Y").date() if medical_exam_value and medical_exam_value != "Не указано" else None
@@ -333,7 +359,7 @@ def employees_page(page: ft.Page = None) -> ft.Column:
             edit_dialog.content = ft.Column([
                 edit_name,
                 edit_birth,
-                edit_hire,
+                edit_certificate,
                 edit_guard_license,
                 edit_medical_exam,
                 edit_periodic_check,
@@ -380,7 +406,7 @@ def employees_page(page: ft.Page = None) -> ft.Column:
         columns=[
             ft.DataColumn(ft.Text("ФИО", width=200), on_sort=lambda _: on_sort("full_name")),
             ft.DataColumn(ft.Text("Дата рождения", width=120), on_sort=lambda _: on_sort("birth_date")),
-            ft.DataColumn(ft.Text("Дата принятия", width=120), on_sort=lambda _: on_sort("hire_date")),
+            ft.DataColumn(ft.Text("Номер удостоверения", width=150), on_sort=lambda _: on_sort("certificate_number")),
             ft.DataColumn(ft.Text("Дата выдачи УЧО", width=120)),
             ft.DataColumn(ft.Text("Разряд", width=70)),
             ft.DataColumn(ft.Text("Медкомиссия", width=120)),

@@ -8,6 +8,7 @@ import os
 from views.objects import objects_page
 from views.shifts2 import shifts2_page
 from views.statistics import statistics_page
+from views.notes import notes_page
 from database.models import Employee
 from datetime import datetime
 
@@ -108,6 +109,9 @@ def main(page: ft.Page):
             
         elif selected_index == 5:
             content_container.content = statistics_page(page)
+
+        elif selected_index == 6:
+            content_container.content = notes_page(page)
 
         
         page.close(page.drawer)

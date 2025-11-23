@@ -28,7 +28,7 @@ class Employee(BaseModel):
     full_name = CharField(max_length=200, verbose_name="ФИО")
     birth_date = DateField(verbose_name="Дата рождения")
     photo_path = CharField(max_length=500, null=True, verbose_name="Путь к фото")
-    hire_date = DateField(verbose_name="Дата принятия на работу")
+    certificate_number = CharField(max_length=20, null=True, verbose_name="Номер удостоверения")
     termination_date = DateField(null=True, verbose_name="Дата увольнения")
     guard_license_date = DateField(null=True, verbose_name="Дата выдачи удостоверения охранника")
     guard_rank = IntegerField(null=True, verbose_name="Разряд охранника (3-6)")
@@ -140,6 +140,15 @@ def init_database():
             db.execute_sql('ALTER TABLE assignments ADD COLUMN bonus_comment TEXT')
         if 'deduction_amount' not in columns:
             db.execute_sql('ALTER TABLE assignments ADD COLUMN deduction_amount DECIMAL(7,2) DEFAULT 0')
+    except:
+        pass
+    
+    # Миграция: добавляем поле номера удостоверения
+    try:
+        cursor = db.execute_sql('PRAGMA table_info(employees)')
+        columns = [row[1] for row in cursor.fetchall()]
+        if 'certificate_number' not in columns:
+            db.execute_sql('ALTER TABLE employees ADD COLUMN certificate_number VARCHAR(20)')
     except:
         pass
     

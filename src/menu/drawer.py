@@ -38,5 +38,10 @@ def drawer(on_change_handler):
                 label="Статистика",
                 selected_icon=ft.Icons.BAR_CHART_OUTLINED,
             ),
+            ft.NavigationDrawerDestination(
+                icon=ft.Icon(ft.Icons.NOTE),
+                label="Заметки",
+                selected_icon=ft.Icons.NOTE_OUTLINED,
+            ),
         ],
     )

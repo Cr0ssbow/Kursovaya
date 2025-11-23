@@ -386,7 +386,11 @@ def shifts2_page(page: ft.Page = None):
         try:
             if db.is_closed():
                 db.connect()
-            employees = Employee.select().where(Employee.full_name.contains(query))
+            # Сначала точное совпадение
+            employees = list(Employee.select().where(Employee.full_name.contains(query)))
+            # Если не найдено, ищем без учета регистра
+            if not employees:
+                employees = list(Employee.select().where(Employee.full_name.contains(query.lower()) | Employee.full_name.contains(query.upper()) | Employee.full_name.contains(query.title())))
             search_results.controls.clear()
             if employees:
                 for emp in employees[:5]:
@@ -417,7 +421,11 @@ def shifts2_page(page: ft.Page = None):
         try:
             if db.is_closed():
                 db.connect()
-            objects = Object.select().where(Object.name.contains(query))
+            # Сначала точное совпадение
+            objects = list(Object.select().where(Object.name.contains(query)))
+            # Если не найдено, ищем без учета регистра
+            if not objects:
+                objects = list(Object.select().where(Object.name.contains(query.lower()) | Object.name.contains(query.upper()) | Object.name.contains(query.title())))
             object_search_results.controls.clear()
             if objects:
                 for obj in objects[:5]:
