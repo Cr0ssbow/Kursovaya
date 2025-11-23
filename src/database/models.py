@@ -32,6 +32,8 @@ class Employee(BaseModel):
     termination_date = DateField(null=True, verbose_name="Дата увольнения")
     guard_license_date = DateField(null=True, verbose_name="Дата выдачи удостоверения охранника")
     guard_rank = IntegerField(null=True, verbose_name="Разряд охранника (3-6)")
+    medical_exam_date = DateField(null=True, verbose_name="Дата прохождения медкомиссии")
+    periodic_check_date = DateField(null=True, verbose_name="Дата периодической проверки")
     hourly_rate = DecimalField(max_digits=7, decimal_places=2, verbose_name="Почасовая ставка", default=0)
     hours_worked = IntegerField(verbose_name="Количество часов", default=0)
     salary = DecimalField(max_digits=10, decimal_places=2, verbose_name="Зарплата", default=0)
@@ -117,6 +119,10 @@ def init_database():
             db.execute_sql('ALTER TABLE employees ADD COLUMN guard_license_date DATE')
         if 'guard_rank' not in columns:
             db.execute_sql('ALTER TABLE employees ADD COLUMN guard_rank INTEGER')
+        if 'medical_exam_date' not in columns:
+            db.execute_sql('ALTER TABLE employees ADD COLUMN medical_exam_date DATE')
+        if 'periodic_check_date' not in columns:
+            db.execute_sql('ALTER TABLE employees ADD COLUMN periodic_check_date DATE')
     except:
         pass
     

@@ -79,7 +79,7 @@ def main(page: ft.Page):
 
     # Контейнер для отображения текущей страницы
     content_container = ft.Container(
-        content=home_page(),  # По умолчанию показываем главную страницу
+        content=home_page(page),  # По умолчанию показываем главную страницу
         expand=True,
     )
     
@@ -89,7 +89,7 @@ def main(page: ft.Page):
         
         # Переключаем страницу в зависимости от индекса
         if selected_index == 0:
-            content_container.content = home_page()
+            content_container.content = home_page(page)
 
         elif selected_index == 1:
             content_container.content = settings_page(page) 

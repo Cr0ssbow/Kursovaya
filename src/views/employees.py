@@ -62,9 +62,11 @@ def employees_page(page: ft.Page = None) -> ft.Column:
     # Диалог и поля формы
     add_dialog = ft.AlertDialog(modal=True)
     name_field = ft.TextField(label="ФИО", width=300)
-    birth_field = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=180, on_change=format_date_input, input_filter=ft.InputFilter(regex_string=r"[0-9.]", allow=True), max_length=10)
-    hire_field = ft.TextField(label="Дата принятия (дд.мм.гггг)", width=180, on_change=format_date_input, input_filter=ft.InputFilter(regex_string=r"[0-9.]", allow=True), max_length=10)
-    guard_license_field = ft.TextField(label="Дата выдачи УЧО (дд.мм.гггг)", width=250, on_change=format_date_input, input_filter=ft.InputFilter(regex_string=r"[0-9.]", allow=True), max_length=10)
+    birth_field = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=180, on_change=format_date_input, max_length=10)
+    hire_field = ft.TextField(label="Дата принятия (дд.мм.гггг)", width=180, on_change=format_date_input, max_length=10)
+    guard_license_field = ft.TextField(label="Дата выдачи УЧО (дд.мм.гггг)", width=250, on_change=format_date_input, max_length=10)
+    medical_exam_field = ft.TextField(label="Дата прохождения медкомиссии (дд.мм.гггг)", width=250, on_change=format_date_input, max_length=10)
+    periodic_check_field = ft.TextField(label="Дата прохождения периодической проверки (дд.мм.гггг)", width=250, on_change=format_date_input, max_length=10)
     guard_rank_field = ft.Dropdown(label="Разряд охранника", width=180, options=[ft.dropdown.Option(str(i)) for i in range(3, 7)])
     payment_method_field = ft.Dropdown(label="Способ выдачи зарплаты", width=250, options=[ft.dropdown.Option("на карту"), ft.dropdown.Option("на руки")], value="на карту")
 
@@ -75,6 +77,8 @@ def employees_page(page: ft.Page = None) -> ft.Column:
             birth_field,
             hire_field,
             guard_license_field,
+            medical_exam_field,
+            periodic_check_field,
             guard_rank_field,
             payment_method_field,
         ], spacing=10)
@@ -102,6 +106,8 @@ def employees_page(page: ft.Page = None) -> ft.Column:
             hire_value = hire_field.value.strip()
             guard_license_value = guard_license_field.value.strip()
             guard_rank_value = guard_rank_field.value
+            medical_exam_value = medical_exam_field.value.strip()
+            periodic_check_value = periodic_check_field.value.strip()
             payment_method_value = payment_method_field.value
             
             if not full_name:
@@ -115,6 +121,8 @@ def employees_page(page: ft.Page = None) -> ft.Column:
             hire_date = datetime.strptime(hire_value, "%d.%m.%Y").date()
             guard_license_date = datetime.strptime(guard_license_value, "%d.%m.%Y").date() if guard_license_value else None
             guard_rank = int(guard_rank_value) if guard_rank_value else None
+            medical_exam_date = datetime.strptime(medical_exam_value, "%d.%m.%Y").date() if medical_exam_value else None
+            periodic_check_date = datetime.strptime(periodic_check_value, "%d.%m.%Y").date() if periodic_check_value else None
             
             Employee.create(
                 full_name=full_name,
@@ -122,6 +130,8 @@ def employees_page(page: ft.Page = None) -> ft.Column:
                 hire_date=hire_date,
                 guard_license_date=guard_license_date,
                 guard_rank=guard_rank,
+                medical_exam_date=medical_exam_date,
+                periodic_check_date=periodic_check_date,
                 payment_method=payment_method_value or "на карту"
             )
             close_add_dialog(e)
@@ -134,6 +144,8 @@ def employees_page(page: ft.Page = None) -> ft.Column:
                 birth_field,
                 hire_field,
                 guard_license_field,
+                medical_exam_field,
+                periodic_check_field,
                 guard_rank_field,
                 payment_method_field,
                 ft.Text(f"Ошибка: {str(ex)}", color=ft.Colors.RED)
@@ -173,6 +185,8 @@ def employees_page(page: ft.Page = None) -> ft.Column:
         for employee in page_employees:
             guard_license_text = format_date(getattr(employee, 'guard_license_date', None))
             guard_rank_text = str(getattr(employee, 'guard_rank', '')) if getattr(employee, 'guard_rank', None) else "Не указано"
+            medical_exam_text = format_date(getattr(employee, 'medical_exam_date', None))
+            periodic_check_text = format_date(getattr(employee, 'periodic_check_date', None))
             
             employees_table.rows.append(
                 ft.DataRow(
@@ -182,6 +196,8 @@ def employees_page(page: ft.Page = None) -> ft.Column:
                         ft.DataCell(ft.Text(format_date(employee.hire_date))),
                         ft.DataCell(ft.Text(guard_license_text)),
                         ft.DataCell(ft.Text(guard_rank_text)),
+                        ft.DataCell(ft.Text(medical_exam_text)),
+                        ft.DataCell(ft.Text(periodic_check_text)),
                     ]
                 )
             )
@@ -205,10 +221,12 @@ def employees_page(page: ft.Page = None) -> ft.Column:
     # Диалог редактирования
     edit_dialog = ft.AlertDialog(modal=True)
     edit_name = ft.TextField(label="ФИО", width=300)
-    edit_birth = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=180, on_change=format_date_input, input_filter=ft.InputFilter(regex_string=r"[0-9.]", allow=True), max_length=10)
-    edit_hire = ft.TextField(label="Дата принятия (дд.мм.гггг)", width=180, on_change=format_date_input, input_filter=ft.InputFilter(regex_string=r"[0-9.]", allow=True), max_length=10)
-    edit_guard_license = ft.TextField(label="Дата выдачи удостоверения (дд.мм.гггг)", width=250, on_change=format_date_input, input_filter=ft.InputFilter(regex_string=r"[0-9.]", allow=True), max_length=10)
+    edit_birth = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=180, on_change=format_date_input, max_length=10)
+    edit_hire = ft.TextField(label="Дата принятия (дд.мм.гггг)", width=180, on_change=format_date_input, max_length=10)
+    edit_guard_license = ft.TextField(label="Дата выдачи удостоверения (дд.мм.гггг)", width=250, on_change=format_date_input, max_length=10)
     edit_guard_rank = ft.Dropdown(label="Разряд охранника", width=180, options=[ft.dropdown.Option(str(i)) for i in range(3, 7)])
+    edit_medical_exam = ft.TextField(label="Дата прохождения медкомиссии (дд.мм.гггг)", width=250, on_change=format_date_input, max_length=10)
+    edit_periodic_check = ft.TextField(label="Дата прохождения периодической проверки (дд.мм.гггг)", width=250, on_change=format_date_input, max_length=10)
     edit_payment_method = ft.Dropdown(label="Способ выдачи зарплаты", width=250, options=[ft.dropdown.Option("на карту"), ft.dropdown.Option("на руки")])
 
     # Диалог подтверждения удаления
@@ -249,6 +267,8 @@ def employees_page(page: ft.Page = None) -> ft.Column:
         edit_hire.value = format_date(employee.hire_date)
         edit_guard_license.value = format_date(employee.guard_license_date) if hasattr(employee, 'guard_license_date') else ""
         edit_guard_rank.value = str(employee.guard_rank) if hasattr(employee, 'guard_rank') and employee.guard_rank else None
+        edit_medical_exam.value = format_date(employee.medical_exam_date) if hasattr(employee, 'medical_exam_date') else ""
+        edit_periodic_check.value = format_date(employee.periodic_check_date) if hasattr(employee, 'periodic_check_date') else ""
         edit_payment_method.value = getattr(employee, 'payment_method', 'на карту')
         edit_dialog.title = ft.Text(f"Редактировать сотрудника")
         edit_dialog.content = ft.Column([
@@ -256,6 +276,8 @@ def employees_page(page: ft.Page = None) -> ft.Column:
             edit_birth,
             edit_hire,
             edit_guard_license,
+            edit_medical_exam,
+            edit_periodic_check,
             edit_guard_rank,
             edit_payment_method,
         ], spacing=10)
@@ -283,6 +305,8 @@ def employees_page(page: ft.Page = None) -> ft.Column:
             hire_value = edit_hire.value.strip()
             guard_license_value = edit_guard_license.value.strip()
             guard_rank_value = edit_guard_rank.value
+            medical_exam_value = edit_medical_exam.value.strip()
+            periodic_check_value = edit_periodic_check.value.strip()
             payment_method_value = edit_payment_method.value
             
             if not full_name:
@@ -297,6 +321,8 @@ def employees_page(page: ft.Page = None) -> ft.Column:
             employee.hire_date = datetime.strptime(hire_value, "%d.%m.%Y").date()
             employee.guard_license_date = datetime.strptime(guard_license_value, "%d.%m.%Y").date() if guard_license_value and guard_license_value != "Не указано" else None
             employee.guard_rank = int(guard_rank_value) if guard_rank_value else None
+            employee.medical_exam_date = datetime.strptime(medical_exam_value, "%d.%m.%Y").date() if medical_exam_value and medical_exam_value != "Не указано" else None
+            employee.periodic_check_date = datetime.strptime(periodic_check_value, "%d.%m.%Y").date() if periodic_check_value and periodic_check_value != "Не указано" else None
             employee.payment_method = payment_method_value or 'на карту'
             employee.save()
             close_edit_dialog(None)
@@ -309,6 +335,8 @@ def employees_page(page: ft.Page = None) -> ft.Column:
                 edit_birth,
                 edit_hire,
                 edit_guard_license,
+                edit_medical_exam,
+                edit_periodic_check,
                 edit_guard_rank,
                 edit_payment_method,
                 ft.Text(f"Ошибка: {str(ex)}", color=ft.Colors.RED)
@@ -350,11 +378,13 @@ def employees_page(page: ft.Page = None) -> ft.Column:
     # Создаем DataTable
     employees_table = ft.DataTable(
         columns=[
-            ft.DataColumn(ft.Text("ФИО", width=300), on_sort=lambda _: on_sort("full_name")),
-            ft.DataColumn(ft.Text("Дата рождения", width=150), on_sort=lambda _: on_sort("birth_date")),
-            ft.DataColumn(ft.Text("Дата принятия", width=150), on_sort=lambda _: on_sort("hire_date")),
-            ft.DataColumn(ft.Text("Дата выдачи УЧО", width=150)),
-            ft.DataColumn(ft.Text("Разряд", width=100)),
+            ft.DataColumn(ft.Text("ФИО", width=200), on_sort=lambda _: on_sort("full_name")),
+            ft.DataColumn(ft.Text("Дата рождения", width=120), on_sort=lambda _: on_sort("birth_date")),
+            ft.DataColumn(ft.Text("Дата принятия", width=120), on_sort=lambda _: on_sort("hire_date")),
+            ft.DataColumn(ft.Text("Дата выдачи УЧО", width=120)),
+            ft.DataColumn(ft.Text("Разряд", width=70)),
+            ft.DataColumn(ft.Text("Медкомиссия", width=120)),
+            ft.DataColumn(ft.Text("Период. проверка", width=120)),
         ],
         rows=[],
         horizontal_lines=ft.border.BorderSide(1, ft.Colors.OUTLINE),
