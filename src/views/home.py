@@ -117,27 +117,27 @@ def home_page(page: ft.Page = None) -> ft.Column:
     
     def get_license_color(min_days):
         """Определяет цвет контейнера УЧО"""
-        if min_days < 30:
+        if min_days <= 30:
             return ft.Colors.RED
-        elif min_days < 60:
+        elif min_days <= 60:
             return ft.Colors.AMBER
         else:
             return ft.Colors.GREEN
     
     def get_medical_color(min_days):
         """Определяет цвет контейнера медкомиссий"""
-        if min_days < 20:
+        if min_days <= 20:
             return ft.Colors.RED
-        elif min_days < 40:
+        elif min_days <= 40:
             return ft.Colors.AMBER
         else:
             return ft.Colors.GREEN
     
     def get_periodic_color(min_days):
         """Определяет цвет контейнера периодических проверок"""
-        if min_days < 10:
+        if min_days <= 10:
             return ft.Colors.RED
-        elif min_days < 20:
+        elif min_days <= 20:
             return ft.Colors.AMBER
         else:
             return ft.Colors.GREEN

@@ -6,7 +6,6 @@ from views.employees import employees_page
 from views.settings import settings_page, load_theme_from_db
 import os
 from views.objects import objects_page
-
 from views.shifts2 import shifts2_page
 from views.statistics import statistics_page
 from database.models import Employee
