@@ -111,9 +111,12 @@ def employees_page(page: ft.Page = None) -> ft.Column:
             page.update()
 
     def save_employee(e):
-        from database.models import Employee
+        from database.models import Employee, db
         from datetime import datetime
         try:
+            if db.is_closed():
+                db.connect()
+            
             full_name = name_field.value.strip()
             birth_value = birth_field.value.strip()
             certificate_value = certificate_field.value.strip()
@@ -165,8 +168,11 @@ def employees_page(page: ft.Page = None) -> ft.Column:
             ], spacing=10)
             if page:
                 page.update()
-        except Exception:
-            pass
+        except Exception as ex:
+            print(f"Ошибка сохранения: {ex}")
+        finally:
+            if not db.is_closed():
+                db.close()
     
     search_value = ""
 
@@ -326,6 +332,9 @@ def employees_page(page: ft.Page = None) -> ft.Column:
     def save_edit_employee(employee):
         from datetime import datetime
         try:
+            if db.is_closed():
+                db.connect()
+            
             full_name = edit_name.value.strip()
             birth_value = edit_birth.value.strip()
             certificate_value = edit_certificate.value.strip()
@@ -367,9 +376,11 @@ def employees_page(page: ft.Page = None) -> ft.Column:
                 edit_payment_method,
                 ft.Text(f"Ошибка: {str(ex)}", color=ft.Colors.RED)
             ], spacing=10)
-        except Exception:
-            pass
-            # actions не меняем, чтобы не дублировались
+        except Exception as ex:
+            print(f"Ошибка редактирования: {ex}")
+        finally:
+            if not db.is_closed():
+                db.close()
             if page:
                 page.update()
 

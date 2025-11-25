@@ -166,6 +166,48 @@ def init_database():
             db.execute_sql('ALTER TABLE employees ADD COLUMN payment_method VARCHAR(20) DEFAULT "на карту"')
     except:
         pass
+    
+    # Миграция: удаляем старое поле hire_date если оно есть
+    try:
+        cursor = db.execute_sql('PRAGMA table_info(employees)')
+        columns = [row[1] for row in cursor.fetchall()]
+        if 'hire_date' in columns:
+            # Создаем новую таблицу без hire_date
+            db.execute_sql('''
+                CREATE TABLE employees_new (
+                    id INTEGER PRIMARY KEY,
+                    full_name VARCHAR(200) NOT NULL,
+                    birth_date DATE NOT NULL,
+                    photo_path VARCHAR(500),
+                    certificate_number VARCHAR(20),
+                    termination_date DATE,
+                    guard_license_date DATE,
+                    guard_rank INTEGER,
+                    medical_exam_date DATE,
+                    periodic_check_date DATE,
+                    hourly_rate DECIMAL(7,2) DEFAULT 0,
+                    hours_worked INTEGER DEFAULT 0,
+                    salary DECIMAL(10,2) DEFAULT 0,
+                    payment_method VARCHAR(20) DEFAULT "на карту",
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            # Копируем данные
+            db.execute_sql('''
+                INSERT INTO employees_new 
+                (id, full_name, birth_date, photo_path, certificate_number, termination_date, 
+                 guard_license_date, guard_rank, medical_exam_date, periodic_check_date, 
+                 hourly_rate, hours_worked, salary, payment_method, created_at)
+                SELECT id, full_name, birth_date, photo_path, certificate_number, termination_date,
+                       guard_license_date, guard_rank, medical_exam_date, periodic_check_date,
+                       hourly_rate, hours_worked, salary, payment_method, created_at
+                FROM employees
+            ''')
+            # Удаляем старую таблицу и переименовываем новую
+            db.execute_sql('DROP TABLE employees')
+            db.execute_sql('ALTER TABLE employees_new RENAME TO employees')
+    except:
+        pass
 
 # Инициализируем базу данных при импорте
 init_database()
