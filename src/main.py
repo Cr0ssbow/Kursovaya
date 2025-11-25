@@ -1,4 +1,5 @@
 import flet as ft
+import sys
 from peewee import *
 from menu.drawer import drawer
 from views.home import home_page
@@ -25,7 +26,10 @@ def check_birthdays():
 
 def main(page: ft.Page):
     page.title = "ЧОП Легион - Система учёта сотрудников"
-    icon_path = os.path.abspath("D:/Kursovaya/src/assets/legion.ico")
+    if getattr(sys, 'frozen', False):
+        icon_path = os.path.join(sys._MEIPASS, 'assets', 'legion.ico')
+    else:
+        icon_path = os.path.abspath("D:/Kursovaya/src/assets/legion.ico")
     page.window.icon = icon_path
     page.window_width = 800
     page.window_height = 600

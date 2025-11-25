@@ -1,10 +1,16 @@
 from peewee import *
 from datetime import datetime
 import os
+import sys
 
 # Создаем директорию для базы данных если её нет
-db_dir = os.path.join(os.path.dirname(__file__), '..', 'data')
-os.makedirs(db_dir, exist_ok=True)
+if getattr(sys, 'frozen', False):
+    # Если запущен как exe файл - создаем БД рядом с exe
+    db_dir = os.path.dirname(sys.executable)
+else:
+    # Если запущен как скрипт
+    db_dir = os.path.join(os.path.dirname(__file__), '..', 'data')
+    os.makedirs(db_dir, exist_ok=True)
 
 # Путь к базе данных
 db_path = os.path.join(db_dir, 'employees.db')
