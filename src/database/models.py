@@ -1,22 +1,26 @@
 from peewee import *
 from datetime import datetime
 import os
-import sys
+from dotenv import load_dotenv
 
-# Создаем директорию для базы данных если её нет
-if getattr(sys, 'frozen', False):
-    # Если запущен как exe файл - создаем БД рядом с exe
-    db_dir = os.path.dirname(sys.executable)
-else:
-    # Если запущен как скрипт
-    db_dir = os.path.join(os.path.dirname(__file__), '..', 'data')
-    os.makedirs(db_dir, exist_ok=True)
+# Загружаем переменные из .env файла
+load_dotenv()
 
-# Путь к базе данных
-db_path = os.path.join(db_dir, 'employees.db')
+# Настройки подключения к PostgreSQL
+DB_HOST = os.getenv('DB_HOST', 'localhost')
+DB_PORT = os.getenv('DB_PORT', 5432)
+DB_NAME = os.getenv('DB_NAME', 'legion_employees')
+DB_USER = os.getenv('DB_USER', 'postgres')
+DB_PASSWORD = os.getenv('DB_PASSWORD', 'password')
 
-# Инициализация базы данных
-db = SqliteDatabase(db_path)
+# Инициализация базы данных PostgreSQL
+db = PostgresqlDatabase(
+    DB_NAME,
+    user=DB_USER,
+    password=DB_PASSWORD,
+    host=DB_HOST,
+    port=DB_PORT
+)
 
 class BaseModel(Model):
     class Meta:
@@ -143,112 +147,13 @@ class Assignment(BaseModel):
 # Создание таблиц
 def init_database():
     """Инициализация базы данных"""
-    db.connect()
-    db.create_tables([GuardEmployee, ChiefEmployee, OfficeEmployee, Settings, Object, Assignment], safe=True)
-    
-
-    # Миграция: добавляем hourly_rate к таблице objects
     try:
-        # Проверяем, есть ли уже поле hourly_rate
-        cursor = db.execute_sql('PRAGMA table_info(objects)')
-        columns = [row[1] for row in cursor.fetchall()]
-        if 'hourly_rate' not in columns:
-            db.execute_sql('ALTER TABLE objects ADD COLUMN hourly_rate DECIMAL(7,2) DEFAULT 0')
-    except:
-        pass
-    
-    # Миграция: добавляем поля охранника к таблице employees
-    try:
-        cursor = db.execute_sql('PRAGMA table_info(employees)')
-        columns = [row[1] for row in cursor.fetchall()]
-        if 'guard_license_date' not in columns:
-            db.execute_sql('ALTER TABLE employees ADD COLUMN guard_license_date DATE')
-        if 'guard_rank' not in columns:
-            db.execute_sql('ALTER TABLE employees ADD COLUMN guard_rank INTEGER')
-        if 'medical_exam_date' not in columns:
-            db.execute_sql('ALTER TABLE employees ADD COLUMN medical_exam_date DATE')
-        if 'periodic_check_date' not in columns:
-            db.execute_sql('ALTER TABLE employees ADD COLUMN periodic_check_date DATE')
-    except:
-        pass
-    
-    # Миграция: добавляем поля премий и прогулов к таблице assignments
-    try:
-        cursor = db.execute_sql('PRAGMA table_info(assignments)')
-        columns = [row[1] for row in cursor.fetchall()]
-        if 'is_absent' not in columns:
-            db.execute_sql('ALTER TABLE assignments ADD COLUMN is_absent BOOLEAN DEFAULT 0')
-        if 'absent_comment' not in columns:
-            db.execute_sql('ALTER TABLE assignments ADD COLUMN absent_comment TEXT')
-        if 'bonus_amount' not in columns:
-            db.execute_sql('ALTER TABLE assignments ADD COLUMN bonus_amount DECIMAL(7,2) DEFAULT 0')
-        if 'bonus_comment' not in columns:
-            db.execute_sql('ALTER TABLE assignments ADD COLUMN bonus_comment TEXT')
-        if 'deduction_amount' not in columns:
-            db.execute_sql('ALTER TABLE assignments ADD COLUMN deduction_amount DECIMAL(7,2) DEFAULT 0')
-    except:
-        pass
-    
-    # Миграция: добавляем поле номера удостоверения
-    try:
-        cursor = db.execute_sql('PRAGMA table_info(employees)')
-        columns = [row[1] for row in cursor.fetchall()]
-        if 'certificate_number' not in columns:
-            db.execute_sql('ALTER TABLE employees ADD COLUMN certificate_number VARCHAR(20)')
-    except:
-        pass
-    
-    # Миграция: добавляем поле способа выдачи зарплаты
-    try:
-        cursor = db.execute_sql('PRAGMA table_info(employees)')
-        columns = [row[1] for row in cursor.fetchall()]
-        if 'payment_method' not in columns:
-            db.execute_sql('ALTER TABLE employees ADD COLUMN payment_method VARCHAR(20) DEFAULT "на карту"')
-        if 'termination_reason' not in columns:
-            db.execute_sql('ALTER TABLE employees ADD COLUMN termination_reason TEXT')
-    except:
-        pass
-    
-    # Миграция: удаляем старое поле hire_date если оно есть
-    try:
-        cursor = db.execute_sql('PRAGMA table_info(employees)')
-        columns = [row[1] for row in cursor.fetchall()]
-        if 'hire_date' in columns:
-            # Создаем новую таблицу без hire_date
-            db.execute_sql('''
-                CREATE TABLE employees_new (
-                    id INTEGER PRIMARY KEY,
-                    full_name VARCHAR(200) NOT NULL,
-                    birth_date DATE NOT NULL,
-                    photo_path VARCHAR(500),
-                    certificate_number VARCHAR(20),
-                    termination_date DATE,
-                    termination_reason TEXT,
-                    guard_license_date DATE,
-                    guard_rank INTEGER,
-                    medical_exam_date DATE,
-                    periodic_check_date DATE,
-                    hours_worked INTEGER DEFAULT 0,
-                    salary DECIMAL(10,2) DEFAULT 0,
-                    payment_method VARCHAR(20) DEFAULT "на карту"
-                )
-            ''')
-            # Копируем данные
-            db.execute_sql('''
-                INSERT INTO employees_new 
-                (id, full_name, birth_date, photo_path, certificate_number, termination_date, termination_reason,
-                 guard_license_date, guard_rank, medical_exam_date, periodic_check_date, 
-                 hours_worked, salary, payment_method)
-                SELECT id, full_name, birth_date, photo_path, certificate_number, termination_date, termination_reason,
-                       guard_license_date, guard_rank, medical_exam_date, periodic_check_date,
-                       hours_worked, salary, payment_method
-                FROM employees
-            ''')
-            # Удаляем старую таблицу и переименовываем новую
-            db.execute_sql('DROP TABLE employees')
-            db.execute_sql('ALTER TABLE employees_new RENAME TO employees')
-    except:
-        pass
+        db.connect()
+        db.create_tables([GuardEmployee, ChiefEmployee, OfficeEmployee, Settings, Object, Assignment], safe=True)
+    except Exception as e:
+        print(f"Ошибка подключения к PostgreSQL: {e}")
+        print("Убедитесь, что PostgreSQL запущен и настройки подключения корректны")
 
 # Инициализируем базу данных при импорте
-init_database()
+if __name__ != '__main__':
+    init_database()
