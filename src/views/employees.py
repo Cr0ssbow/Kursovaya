@@ -3,8 +3,8 @@ from database.models import Employee, Assignment, db
 from datetime import datetime
 
 def load_employees():
-    """Загружает список сотрудников из БД"""
-    return Employee.select().order_by(Employee.full_name)
+    """Загружает список активных сотрудников из БД"""
+    return Employee.select().where(Employee.termination_date.is_null()).order_by(Employee.full_name)
 
 def format_date(date):
     """Форматирует дату в строку дд.мм.гггг"""
@@ -175,13 +175,19 @@ def employees_page(page: ft.Page = None) -> ft.Column:
                 db.close()
     
     search_value = ""
+    selected_rank = "Все разряды"
 
     def refresh_table():
         """Обновляет данные в таблице с учетом поиска и пагинации"""
+        query = Employee.select().where(Employee.termination_date.is_null())
+        
         if search_value:
-            employees_list = list(Employee.select().where(Employee.full_name.contains(search_value)).order_by(Employee.full_name))
-        else:
-            employees_list = list(load_employees())
+            query = query.where(Employee.full_name.contains(search_value))
+        
+        if selected_rank != "Все разряды":
+            query = query.where(Employee.guard_rank == int(selected_rank))
+        
+        employees_list = list(query.order_by(Employee.full_name))
         # Сортировка
         def key(emp):
             if sort_column == "full_name":
@@ -202,21 +208,13 @@ def employees_page(page: ft.Page = None) -> ft.Column:
         
         employees_table.rows.clear()
         for employee in page_employees:
-            guard_license_text = format_date(getattr(employee, 'guard_license_date', None))
             guard_rank_text = str(getattr(employee, 'guard_rank', '')) if getattr(employee, 'guard_rank', None) else "Не указано"
-            medical_exam_text = format_date(getattr(employee, 'medical_exam_date', None))
-            periodic_check_text = format_date(getattr(employee, 'periodic_check_date', None))
             
             employees_table.rows.append(
                 ft.DataRow(
                     cells=[
-                        ft.DataCell(ft.Text(employee.full_name), on_tap=lambda e, emp=employee: show_edit_dialog(emp)),
-                        ft.DataCell(ft.Text(format_date(employee.birth_date))),
-                        ft.DataCell(ft.Text(getattr(employee, 'certificate_number', '') or 'Не указано')),
-                        ft.DataCell(ft.Text(guard_license_text)),
+                        ft.DataCell(ft.Text(employee.full_name, color=ft.Colors.BLUE), on_tap=lambda e, emp=employee: show_detail_dialog(emp)),
                         ft.DataCell(ft.Text(guard_rank_text)),
-                        ft.DataCell(ft.Text(medical_exam_text)),
-                        ft.DataCell(ft.Text(periodic_check_text)),
                     ]
                 )
             )
@@ -261,37 +259,76 @@ def employees_page(page: ft.Page = None) -> ft.Column:
     edit_periodic_check = ft.TextField(label="Дата прохождения периодической проверки (дд.мм.гггг)", width=250, on_change=format_date_input, max_length=10)
     edit_payment_method = ft.Dropdown(label="Способ выдачи зарплаты", width=250, options=[ft.dropdown.Option("на карту"), ft.dropdown.Option("на руки")])
 
-    # Диалог подтверждения удаления
-    confirm_delete_dialog = ft.AlertDialog(
+    # Диалог увольнения
+    termination_dialog = ft.AlertDialog(
         modal=True,
-        title=ft.Text("Подтвердите удаление"),
-        content=ft.Text("Вы уверены, что хотите удалить этого сотрудника?"),
+        title=ft.Text("Уволить сотрудника"),
+        content=ft.Column([], height=200),
         actions=[
-            ft.TextButton("Да", on_click=None), # Будет установлен динамически
-            ft.TextButton("Отмена", on_click=lambda e: close_confirm_delete_dialog()),
+            ft.TextButton("Уволить", on_click=None),
+            ft.TextButton("Отмена", on_click=lambda e: close_termination_dialog()),
         ]
     )
+    
+    termination_date_field = ft.TextField(label="Дата увольнения (дд.мм.гггг)", width=200, on_change=format_date_input, max_length=10)
+    termination_reason_field = ft.TextField(label="Причина увольнения (необязательно)", width=300, multiline=True)
 
-    def show_confirm_delete_dialog(employee_to_delete):
-        confirm_delete_dialog.actions[0].on_click = lambda e: delete_employee(employee_to_delete)
-        confirm_delete_dialog.open = True
-        if page and confirm_delete_dialog not in page.overlay:
-            page.overlay.append(confirm_delete_dialog)
+    def show_termination_dialog(employee_to_terminate):
+        termination_date_field.value = ""
+        termination_reason_field.value = ""
+        termination_dialog.content.controls = [
+            ft.Text(f"Увольнение сотрудника: {employee_to_terminate.full_name}", weight="bold"),
+            termination_date_field,
+            termination_reason_field
+        ]
+        termination_dialog.actions[0].on_click = lambda e: terminate_employee(employee_to_terminate)
+        termination_dialog.open = True
+        if page and termination_dialog not in page.overlay:
+            page.overlay.append(termination_dialog)
         if page:
             page.update()
 
-    def close_confirm_delete_dialog():
-        confirm_delete_dialog.open = False
+    def close_termination_dialog():
+        termination_dialog.open = False
         if page:
             page.update()
 
-    def delete_employee(employee):
-        employee.delete_employee()
-        close_confirm_delete_dialog()
-        close_edit_dialog(None) # Закрываем диалог редактирования после удаления
-        refresh_table()
-        if page:
+    def terminate_employee(employee):
+        try:
+            if db.is_closed():
+                db.connect()
+            
+            termination_date_value = termination_date_field.value.strip()
+            termination_reason_value = termination_reason_field.value.strip()
+            
+            if not termination_date_value:
+                termination_dialog.content.controls.append(
+                    ft.Text("Дата увольнения обязательна!", color=ft.Colors.RED)
+                )
+                page.update()
+                return
+            
+            termination_date = datetime.strptime(termination_date_value, "%d.%m.%Y").date()
+            
+            employee.termination_date = termination_date
+            employee.termination_reason = termination_reason_value or None
+            employee.save()
+            
+            close_termination_dialog()
+            close_edit_dialog(None)
+            refresh_table()
+            if page:
+                page.update()
+        except ValueError:
+            termination_dialog.content.controls.append(
+                ft.Text("Неверный формат даты!", color=ft.Colors.RED)
+            )
             page.update()
+        except Exception as ex:
+            print(f"Ошибка увольнения: {ex}")
+        finally:
+            if not db.is_closed():
+                db.close()
 
     def show_edit_dialog(employee):
         edit_name.value = employee.full_name
@@ -315,7 +352,7 @@ def employees_page(page: ft.Page = None) -> ft.Column:
         ], spacing=10)
         edit_dialog.actions = [
             ft.TextButton("Сохранить", on_click=lambda e, emp=employee: save_edit_employee(emp)),
-            ft.TextButton("Удалить", on_click=lambda e, emp=employee: show_confirm_delete_dialog(emp), style=ft.ButtonStyle(color=ft.Colors.RED)),
+            ft.TextButton("Уволить", on_click=lambda e, emp=employee: show_termination_dialog(emp), style=ft.ButtonStyle(color=ft.Colors.RED)),
             ft.TextButton("Отмена", on_click=close_edit_dialog),
         ]
         edit_dialog.open = True
@@ -392,6 +429,14 @@ def employees_page(page: ft.Page = None) -> ft.Column:
         if page:
             page.update()
     
+    def on_rank_change(e):
+        nonlocal selected_rank, current_page
+        selected_rank = e.control.value
+        current_page = 0  # Сброс на первую страницу при фильтрации
+        refresh_table()
+        if page:
+            page.update()
+    
     def prev_page(e):
         nonlocal current_page
         if current_page > 0:
@@ -412,16 +457,40 @@ def employees_page(page: ft.Page = None) -> ft.Column:
     next_btn = ft.IconButton(icon=ft.Icons.ARROW_FORWARD, on_click=next_page)
     page_info = ft.Text("Страница 1 из 1")
     
+    # Диалог детальной информации
+    detail_dialog = ft.AlertDialog(modal=True)
+    
+    def show_detail_dialog(employee):
+        detail_dialog.title = ft.Text(f"Информация о сотруднике: {employee.full_name}")
+        detail_dialog.content = ft.Column([
+            ft.Text(f"Дата рождения: {format_date(employee.birth_date)}", size=16),
+            ft.Text(f"Номер удостоверения: {getattr(employee, 'certificate_number', '') or 'Не указано'}", size=16),
+            ft.Text(f"Дата выдачи УЧО: {format_date(getattr(employee, 'guard_license_date', None))}", size=16),
+            ft.Text(f"Разряд охранника: {str(getattr(employee, 'guard_rank', '')) if getattr(employee, 'guard_rank', None) else 'Не указано'}", size=16),
+            ft.Text(f"Медкомиссия: {format_date(getattr(employee, 'medical_exam_date', None))}", size=16),
+            ft.Text(f"Периодическая проверка: {format_date(getattr(employee, 'periodic_check_date', None))}", size=16),
+            ft.Text(f"Способ выдачи зарплаты: {getattr(employee, 'payment_method', 'на карту')}", size=16),
+        ], spacing=10, height=300)
+        detail_dialog.actions = [
+            ft.TextButton("Редактировать", on_click=lambda e, emp=employee: (close_detail_dialog(), show_edit_dialog(emp))),
+            ft.TextButton("Закрыть", on_click=lambda e: close_detail_dialog()),
+        ]
+        detail_dialog.open = True
+        if page and detail_dialog not in page.overlay:
+            page.overlay.append(detail_dialog)
+        if page:
+            page.update()
+    
+    def close_detail_dialog():
+        detail_dialog.open = False
+        if page:
+            page.update()
+    
     # Создаем DataTable
     employees_table = ft.DataTable(
         columns=[
-            ft.DataColumn(ft.Text("ФИО", width=200), on_sort=lambda _: on_sort("full_name")),
-            ft.DataColumn(ft.Text("Дата рождения", width=120), on_sort=lambda _: on_sort("birth_date")),
-            ft.DataColumn(ft.Text("Номер удостоверения", width=150), on_sort=lambda _: on_sort("certificate_number")),
-            ft.DataColumn(ft.Text("Дата выдачи УЧО", width=120)),
-            ft.DataColumn(ft.Text("Разряд", width=70)),
-            ft.DataColumn(ft.Text("Медкомиссия", width=120)),
-            ft.DataColumn(ft.Text("Период. проверка", width=120)),
+            ft.DataColumn(ft.Text("ФИО", width=400), on_sort=lambda _: on_sort("full_name")),
+            ft.DataColumn(ft.Text("Разряд", width=100)),
         ],
         rows=[],
         horizontal_lines=ft.border.BorderSide(1, ft.Colors.OUTLINE),
@@ -430,7 +499,7 @@ def employees_page(page: ft.Page = None) -> ft.Column:
         data_row_min_height=50,
         data_row_max_height=50,
         column_spacing=10,
-        width=4000,
+        width=600,
         height=707
     )
     refresh_table()
@@ -439,7 +508,7 @@ def employees_page(page: ft.Page = None) -> ft.Column:
         [
             ft.Row(
                 [
-                    ft.Text("Сотрудники", size=24, weight="bold"),
+                    ft.Text("Сотрудники охраны", size=24, weight="bold"),
                     ft.ElevatedButton(
                         "Добавить сотрудника",
                         icon=ft.Icons.ADD,
@@ -457,7 +526,21 @@ def employees_page(page: ft.Page = None) -> ft.Column:
                     autofocus=False,
                     dense=True,
                 ),
-            ], alignment=ft.MainAxisAlignment.START),
+                ft.Dropdown(
+                    label="Разряд",
+                    width=150,
+                    value="Все разряды",
+                    options=[
+                        ft.dropdown.Option("Все разряды"),
+                        ft.dropdown.Option("3"),
+                        ft.dropdown.Option("4"),
+                        ft.dropdown.Option("5"),
+                        ft.dropdown.Option("6"),
+                    ],
+                    on_change=on_rank_change,
+                    dense=True,
+                ),
+            ], alignment=ft.MainAxisAlignment.START, spacing=20),
             ft.Container(
                 content=ft.Column([
                     employees_table

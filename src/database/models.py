@@ -26,28 +26,27 @@ class Settings(BaseModel):
     key = CharField(unique=True)
     value = CharField()
 
-class Employee(BaseModel):
+class GuardEmployee(BaseModel):
     @classmethod
     def exists_by_name(cls, full_name: str) -> bool:
         return cls.select().where(cls.full_name == full_name).exists()
-    """Модель сотрудника"""
+    """Модель сотрудника охраны"""
     full_name = CharField(max_length=200, verbose_name="ФИО")
     birth_date = DateField(verbose_name="Дата рождения")
     photo_path = CharField(max_length=500, null=True, verbose_name="Путь к фото")
     certificate_number = CharField(max_length=20, null=True, verbose_name="Номер удостоверения")
     termination_date = DateField(null=True, verbose_name="Дата увольнения")
+    termination_reason = TextField(null=True, verbose_name="Причина увольнения")
     guard_license_date = DateField(null=True, verbose_name="Дата выдачи удостоверения охранника")
     guard_rank = IntegerField(null=True, verbose_name="Разряд охранника (3-6)")
     medical_exam_date = DateField(null=True, verbose_name="Дата прохождения медкомиссии")
     periodic_check_date = DateField(null=True, verbose_name="Дата периодической проверки")
-    hourly_rate = DecimalField(max_digits=7, decimal_places=2, verbose_name="Почасовая ставка", default=0)
     hours_worked = IntegerField(verbose_name="Количество часов", default=0)
     salary = DecimalField(max_digits=10, decimal_places=2, verbose_name="Зарплата", default=0)
     payment_method = CharField(max_length=20, default="на карту", verbose_name="Способ выдачи зарплаты")
-    created_at = DateTimeField(default=datetime.now)
     
     class Meta:
-        table_name = 'employees'
+        table_name = 'guard_employees'
         
     def is_active(self):
         """Проверка, работает ли сотрудник"""
@@ -59,11 +58,9 @@ class Employee(BaseModel):
         total_hours = 0
         
         for assignment in self.assignments:
-            if not assignment.is_absent:  # Не учитываем прогулы
+            if not assignment.is_absent:
                 total_salary += float(assignment.hourly_rate) * assignment.hours
                 total_hours += assignment.hours
-            
-            # Добавляем премии и вычитаем удержания
             total_salary += float(assignment.bonus_amount) - float(assignment.deduction_amount)
         
         return total_salary, total_hours
@@ -71,6 +68,49 @@ class Employee(BaseModel):
     def delete_employee(self):
         """Удаление сотрудника из базы данных"""
         self.delete_instance()
+
+class ChiefEmployee(BaseModel):
+    @classmethod
+    def exists_by_name(cls, full_name: str) -> bool:
+        return cls.select().where(cls.full_name == full_name).exists()
+    """Модель начальника охраны"""
+    full_name = CharField(max_length=200, verbose_name="ФИО")
+    birth_date = DateField(verbose_name="Дата рождения")
+    photo_path = CharField(max_length=500, null=True, verbose_name="Путь к фото")
+    position = CharField(max_length=100, verbose_name="Должность")
+    termination_date = DateField(null=True, verbose_name="Дата увольнения")
+    termination_reason = TextField(null=True, verbose_name="Причина увольнения")
+    salary = DecimalField(max_digits=10, decimal_places=2, verbose_name="Зарплата", default=0)
+    payment_method = CharField(max_length=20, default="на карту", verbose_name="Способ выдачи зарплаты")
+    
+    class Meta:
+        table_name = 'chief_employees'
+        
+    def is_active(self):
+        return self.termination_date is None
+
+class OfficeEmployee(BaseModel):
+    @classmethod
+    def exists_by_name(cls, full_name: str) -> bool:
+        return cls.select().where(cls.full_name == full_name).exists()
+    """Модель сотрудника офиса"""
+    full_name = CharField(max_length=200, verbose_name="ФИО")
+    birth_date = DateField(verbose_name="Дата рождения")
+    photo_path = CharField(max_length=500, null=True, verbose_name="Путь к фото")
+    position = CharField(max_length=100, verbose_name="Должность")
+    termination_date = DateField(null=True, verbose_name="Дата увольнения")
+    termination_reason = TextField(null=True, verbose_name="Причина увольнения")
+    salary = DecimalField(max_digits=10, decimal_places=2, verbose_name="Зарплата", default=0)
+    payment_method = CharField(max_length=20, default="на карту", verbose_name="Способ выдачи зарплаты")
+    
+    class Meta:
+        table_name = 'office_employees'
+        
+    def is_active(self):
+        return self.termination_date is None
+
+# Для обратной совместимости
+Employee = GuardEmployee
 
 class Object(BaseModel):
     """Модель объекта"""
@@ -85,7 +125,7 @@ class Object(BaseModel):
 
 class Assignment(BaseModel):
     """Модель назначения сотрудника на объект"""
-    employee = ForeignKeyField(Employee, backref='assignments', on_delete='CASCADE') # связь один ко многим employee (1) → (многоо) Assignment
+    employee = ForeignKeyField(GuardEmployee, backref='assignments', on_delete='CASCADE') # связь один ко многим employee (1) → (многоо) Assignment
     object = ForeignKeyField(Object, backref='assignments', on_delete='CASCADE') # связь один ко многим Object (1) → (многоо) Assignment
     date = DateField(verbose_name="Дата назначения")
     hours = IntegerField(verbose_name="Количество часов")
@@ -104,7 +144,7 @@ class Assignment(BaseModel):
 def init_database():
     """Инициализация базы данных"""
     db.connect()
-    db.create_tables([Employee, Settings, Object, Assignment], safe=True)
+    db.create_tables([GuardEmployee, ChiefEmployee, OfficeEmployee, Settings, Object, Assignment], safe=True)
     
 
     # Миграция: добавляем hourly_rate к таблице objects
@@ -164,6 +204,8 @@ def init_database():
         columns = [row[1] for row in cursor.fetchall()]
         if 'payment_method' not in columns:
             db.execute_sql('ALTER TABLE employees ADD COLUMN payment_method VARCHAR(20) DEFAULT "на карту"')
+        if 'termination_reason' not in columns:
+            db.execute_sql('ALTER TABLE employees ADD COLUMN termination_reason TEXT')
     except:
         pass
     
@@ -181,26 +223,25 @@ def init_database():
                     photo_path VARCHAR(500),
                     certificate_number VARCHAR(20),
                     termination_date DATE,
+                    termination_reason TEXT,
                     guard_license_date DATE,
                     guard_rank INTEGER,
                     medical_exam_date DATE,
                     periodic_check_date DATE,
-                    hourly_rate DECIMAL(7,2) DEFAULT 0,
                     hours_worked INTEGER DEFAULT 0,
                     salary DECIMAL(10,2) DEFAULT 0,
-                    payment_method VARCHAR(20) DEFAULT "на карту",
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    payment_method VARCHAR(20) DEFAULT "на карту"
                 )
             ''')
             # Копируем данные
             db.execute_sql('''
                 INSERT INTO employees_new 
-                (id, full_name, birth_date, photo_path, certificate_number, termination_date, 
+                (id, full_name, birth_date, photo_path, certificate_number, termination_date, termination_reason,
                  guard_license_date, guard_rank, medical_exam_date, periodic_check_date, 
-                 hourly_rate, hours_worked, salary, payment_method, created_at)
-                SELECT id, full_name, birth_date, photo_path, certificate_number, termination_date,
+                 hours_worked, salary, payment_method)
+                SELECT id, full_name, birth_date, photo_path, certificate_number, termination_date, termination_reason,
                        guard_license_date, guard_rank, medical_exam_date, periodic_check_date,
-                       hourly_rate, hours_worked, salary, payment_method, created_at
+                       hours_worked, salary, payment_method
                 FROM employees
             ''')
             # Удаляем старую таблицу и переименовываем новую

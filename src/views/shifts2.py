@@ -386,11 +386,69 @@ def shifts2_page(page: ft.Page = None):
         try:
             if db.is_closed():
                 db.connect()
-            # Сначала точное совпадение
-            employees = list(Employee.select().where(Employee.full_name.contains(query)))
+            from datetime import date
+            today = date.today()
+            
+            # Сначала точное совпадение (только активные сотрудники с действительными документами)
+            employees = []
+            all_employees = Employee.select().where(
+                (Employee.full_name.contains(query)) & 
+                (Employee.termination_date.is_null())
+            )
+            
+            for emp in all_employees:
+                # Проверяем сроки документов
+                valid = True
+                
+                # Проверка УЧО (действует 5 лет)
+                if emp.guard_license_date:
+                    guard_expiry = emp.guard_license_date.replace(year=emp.guard_license_date.year + 5)
+                    if guard_expiry < today:
+                        valid = False
+                
+                # Проверка медкомиссии (действует 1 год)
+                if emp.medical_exam_date:
+                    medical_expiry = emp.medical_exam_date.replace(year=emp.medical_exam_date.year + 1)
+                    if medical_expiry < today:
+                        valid = False
+                
+                # Проверка периодической проверки (действует 1 год)
+                if emp.periodic_check_date:
+                    periodic_expiry = emp.periodic_check_date.replace(year=emp.periodic_check_date.year + 1)
+                    if periodic_expiry < today:
+                        valid = False
+                
+                if valid:
+                    employees.append(emp)
+            
             # Если не найдено, ищем без учета регистра
             if not employees:
-                employees = list(Employee.select().where(Employee.full_name.contains(query.lower()) | Employee.full_name.contains(query.upper()) | Employee.full_name.contains(query.title())))
+                all_employees = Employee.select().where(
+                    (Employee.full_name.contains(query.lower()) | Employee.full_name.contains(query.upper()) | Employee.full_name.contains(query.title())) &
+                    (Employee.termination_date.is_null())
+                )
+                
+                for emp in all_employees:
+                    # Проверяем сроки документов
+                    valid = True
+                    
+                    if emp.guard_license_date:
+                        guard_expiry = emp.guard_license_date.replace(year=emp.guard_license_date.year + 5)
+                        if guard_expiry < today:
+                            valid = False
+                    
+                    if emp.medical_exam_date:
+                        medical_expiry = emp.medical_exam_date.replace(year=emp.medical_exam_date.year + 1)
+                        if medical_expiry < today:
+                            valid = False
+                    
+                    if emp.periodic_check_date:
+                        periodic_expiry = emp.periodic_check_date.replace(year=emp.periodic_check_date.year + 1)
+                        if periodic_expiry < today:
+                            valid = False
+                    
+                    if valid:
+                        employees.append(emp)
             search_results.controls.clear()
             if employees:
                 for emp in employees[:5]:

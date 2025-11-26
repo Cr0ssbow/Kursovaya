@@ -19,9 +19,19 @@ def drawer(on_change_handler):
                 selected_icon=ft.Icons.SETTINGS_OUTLINED,
             ),
             ft.NavigationDrawerDestination(
-                icon=ft.Icon(ft.Icons.PERSON),
-                label="Сотрудники",
-                selected_icon=ft.Icons.PERSON_OUTLINED,
+                icon=ft.Icon(ft.Icons.SECURITY),
+                label="Сотрудники охраны",
+                selected_icon=ft.Icons.SECURITY_OUTLINED,
+            ),
+            ft.NavigationDrawerDestination(
+                icon=ft.Icon(ft.Icons.SUPERVISOR_ACCOUNT),
+                label="Начальники охраны",
+                selected_icon=ft.Icons.SUPERVISOR_ACCOUNT_OUTLINED,
+            ),
+            ft.NavigationDrawerDestination(
+                icon=ft.Icon(ft.Icons.WORK),
+                label="Сотрудники офиса",
+                selected_icon=ft.Icons.WORK_OUTLINED,
             ),
             ft.NavigationDrawerDestination(
                 icon=ft.Icon(ft.Icons.BUSINESS),
@@ -42,6 +52,11 @@ def drawer(on_change_handler):
                 icon=ft.Icon(ft.Icons.NOTE),
                 label="Заметки",
                 selected_icon=ft.Icons.NOTE_OUTLINED,
+            ),
+            ft.NavigationDrawerDestination(
+                icon=ft.Icon(ft.Icons.PERSON_OFF),
+                label="Уволенные сотрудники",
+                selected_icon=ft.Icons.PERSON_OFF_OUTLINED,
             ),
         ],
     )

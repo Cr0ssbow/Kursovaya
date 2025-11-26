@@ -4,12 +4,15 @@ from peewee import *
 from menu.drawer import drawer
 from views.home import home_page
 from views.employees import employees_page
+from views.chief_employees import chief_employees_page
+from views.office_employees import office_employees_page
 from views.settings import settings_page, load_theme_from_db
 import os
 from views.objects import objects_page
 from views.shifts2 import shifts2_page
 from views.statistics import statistics_page
 from views.notes import notes_page
+from views.terminated import terminated_page
 from database.models import Employee
 from datetime import datetime
 
@@ -102,22 +105,30 @@ def main(page: ft.Page):
             content_container.content = employees_page(page)
 
         elif selected_index == 3:
-            content_container.content = objects_page(page)
+            content_container.content = chief_employees_page(page)
 
         elif selected_index == 4:
+            content_container.content = office_employees_page(page)
+
+        elif selected_index == 5:
+            content_container.content = objects_page(page)
+
+        elif selected_index == 6:
             shifts_content, shifts_dialog = shifts2_page(page)
             content_container.content = shifts_content
             
             if shifts_dialog not in page.overlay:
                 page.overlay.append(shifts_dialog)
             
-        elif selected_index == 5:
+        elif selected_index == 7:
             content_container.content = statistics_page(page)
 
-        elif selected_index == 6:
+        elif selected_index == 8:
             content_container.content = notes_page(page)
 
-        
+        elif selected_index == 9:
+            content_container.content = terminated_page(page)
+
         page.close(page.drawer)
         page.update()
     
