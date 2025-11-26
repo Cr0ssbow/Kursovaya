@@ -7,6 +7,8 @@ def format_date(date):
     return date.strftime("%d.%m.%Y") if date else "Не указано"
 
 def terminated_page(page: ft.Page = None) -> ft.Column:
+    search_value = ""
+    
     # Диалог действий с сотрудником
     actions_dialog = ft.AlertDialog(
         modal=True,
@@ -63,6 +65,7 @@ def terminated_page(page: ft.Page = None) -> ft.Column:
             ft.Text(f"Сотрудник: {employee.full_name}", weight="bold"),
             ft.Text(f"Дата увольнения: {format_date(employee.termination_date)}"),
             ft.Text(f"Причина: {getattr(employee, 'termination_reason', '') or 'Не указана'}"),
+            ft.Text(f"Компания: {getattr(employee, 'company', 'Легион')}", size=16),
             ft.Divider(),
         ]
         
@@ -136,7 +139,34 @@ def terminated_page(page: ft.Page = None) -> ft.Column:
         try:
             if db.is_closed():
                 db.connect()
-            return list(Employee.select().where(Employee.termination_date.is_null(False)).order_by(Employee.full_name))
+            
+            from database.models import GuardEmployee, ChiefEmployee, OfficeEmployee
+            
+            # Получаем всех уволенных сотрудников
+            all_terminated = []
+            
+            # Охранники
+            guard_query = GuardEmployee.select().where(GuardEmployee.termination_date.is_null(False))
+            if search_value:
+                guard_query = guard_query.where(GuardEmployee.full_name.contains(search_value))
+            all_terminated.extend(list(guard_query))
+            
+            # Начальники
+            chief_query = ChiefEmployee.select().where(ChiefEmployee.termination_date.is_null(False))
+            if search_value:
+                chief_query = chief_query.where(ChiefEmployee.full_name.contains(search_value))
+            all_terminated.extend(list(chief_query))
+            
+            # Офисные сотрудники
+            office_query = OfficeEmployee.select().where(OfficeEmployee.termination_date.is_null(False))
+            if search_value:
+                office_query = office_query.where(OfficeEmployee.full_name.contains(search_value))
+            all_terminated.extend(list(office_query))
+            
+            # Сортируем по имени
+            all_terminated.sort(key=lambda emp: emp.full_name)
+            
+            return all_terminated
         except:
             return []
         finally:
@@ -171,6 +201,7 @@ def terminated_page(page: ft.Page = None) -> ft.Column:
                         ft.DataCell(ft.Text(employee.full_name), on_tap=lambda e, emp=employee: show_employee_actions(emp)),
                         ft.DataCell(ft.Text(format_date(employee.termination_date))),
                         ft.DataCell(ft.Text(getattr(employee, 'termination_reason', '') or 'Не указана')),
+                        ft.DataCell(ft.Text(getattr(employee, 'company', 'Легион'))),
                     ]
                 )
             )
@@ -178,12 +209,18 @@ def terminated_page(page: ft.Page = None) -> ft.Column:
         if page:
             page.update()
     
+    def on_search_change(e):
+        nonlocal search_value
+        search_value = e.control.value.strip()
+        refresh_table()
+    
     # Создаем таблицу
     terminated_table = ft.DataTable(
         columns=[
             ft.DataColumn(ft.Text("ФИО", width=200)),
             ft.DataColumn(ft.Text("Дата увольнения", width=150)),
             ft.DataColumn(ft.Text("Причина увольнения", width=300)),
+            ft.DataColumn(ft.Text("Компания", width=100)),
         ],
         rows=[],
         horizontal_lines=ft.border.BorderSide(1, ft.Colors.OUTLINE),
@@ -200,6 +237,15 @@ def terminated_page(page: ft.Page = None) -> ft.Column:
     return ft.Column([
         ft.Text("Уволенные сотрудники", size=24, weight="bold"),
         ft.Divider(),
+        ft.Row([
+            ft.TextField(
+                label="Поиск по ФИО",
+                width=300,
+                on_change=on_search_change,
+                autofocus=False,
+                dense=True,
+            ),
+        ], alignment=ft.MainAxisAlignment.START),
         ft.Container(
             content=ft.Column([terminated_table], scroll=ft.ScrollMode.AUTO),
             border=ft.border.all(1, ft.Colors.OUTLINE),

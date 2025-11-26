@@ -1,353 +1,536 @@
-import datetime
 import flet as ft
-import locale
-from database.models import Employee, Object, Assignment, db
+import datetime
+from database.models import Assignment, Employee, Object, db
 from peewee import *
+from views.settings import load_cell_shape_from_db
+from base.base_page import BasePage
 
-# Русская локализация
-locale.setlocale(locale.LC_ALL, 'ru_RU.UTF-8')
+# Словарь русских названий месяцев
+RUSSIAN_MONTHS = {
+    1: "Январь", 2: "Февраль", 3: "Март", 4: "Апрель",
+    5: "Май", 6: "Июнь", 7: "Июль", 8: "Август",
+    9: "Сентябрь", 10: "Октябрь", 11: "Ноябрь", 12: "Декабрь"
+}
 
-
-def calendar_page(page: ft.Page):
-    # Отображение выбранной даты в верхней части страницы
-    selected_date_text = ft.Text("Выберите дату", size=20)
-    # Отображение текущего месяца и года
-    current_month_display = ft.Text("", size=24, weight=ft.FontWeight.BOLD)
-    # Контейнер для сетки календаря
-    calendar_grid_container = ft.Column()
-
-    # Загрузка списков сотрудников и объектов из базы данных
-    employees = []
-    objects = []
-    try:
-        if db.is_closed():
-            db.connect()
-        employees = Employee.select()
-        objects = Object.select()
-    except OperationalError as e:
-        print(f"Error fetching data: {e}")
-    finally:
-        if not db.is_closed():
-            db.close()
-
-    # Поле поиска сотрудника
-    employee_search = ft.TextField(
-        label="Поиск сотрудника",
-        width=300,
-        on_change=lambda e: search_employees(e.control.value),
-    )
+class CalendarPage(BasePage):
+    """Страница календаря смен"""
     
-    # Список найденных сотрудников
-    search_results = ft.Column(visible=False)
+    def __init__(self, page: ft.Page):
+        super().__init__(page)
+        self.current_year = datetime.date.today().year
+        self.current_month = datetime.date.today().month
+        self.current_assignment = None
+        self.current_shift_date = None
+        self._init_components()
     
-    # Функция поиска сотрудников по введенному тексту
-    def search_employees(query):
-        # Проверка минимальной длины запроса (2 символа)
-        if not query or len(query) < 2:
-            search_results.visible = False
-            page.update()
-            return
-            
-        # Фильтрация сотрудников по частичному совпадению имени
-        filtered_employees = [emp for emp in employees if query.lower() in emp.full_name.lower()]
-        
-        # Очистка списка результатов и добавление новых
-        search_results.controls.clear()
-        if filtered_employees:
-            # Ограничение количества результатов (5 штук)
-            for emp in filtered_employees[:5]:
-                search_results.controls.append(
-                    ft.ListTile(
-                        title=ft.Text(emp.full_name),
-                        on_click=lambda e, employee=emp: select_employee(employee),
-
-                    )
-                )
-            search_results.visible = True
-        else:
-            # Отображение сообщения о том, что ничего не найдено
-            search_results.controls.append(
-                ft.Text("Сотрудник не найден", color=ft.Colors.ERROR)
-            )
-            search_results.visible = True
-        page.update()
+    def _init_components(self):
+        """Инициализация компонентов"""
+        self.current_month_display = ft.Text("", size=24, weight="bold")
+        self.calendar_grid_container = ft.Column()
+        self._create_dialogs()
+        self._create_form_fields()
+        self.update_calendar()
     
-    # Функция выбора сотрудника из списка результатов
-    def select_employee(employee):
-        # Заполнение поля поиска выбранным именем
-        employee_search.value = employee.full_name
-        # Скрытие списка результатов
-        search_results.visible = False
-        page.update()
-    
-    # Поле поиска объекта
-    object_search = ft.TextField(
-        label="Поиск объекта",
-        width=300,
-        on_change=lambda e: search_objects(e.control.value),
-    )
-    
-    # Список найденных объектов
-    object_search_results = ft.Column(visible=False)
-    
-    # Функция поиска объектов по введенному тексту
-    def search_objects(query):
-        # Проверка минимальной длины запроса (2 символа)
-        if not query or len(query) < 2:
-            object_search_results.visible = False
-            page.update()
-            return
-            
-        # Фильтрация объектов по частичному совпадению названия
-        filtered_objects = [obj for obj in objects if query.lower() in obj.name.lower()]
-        
-        # Очистка списка результатов и добавление новых
-        object_search_results.controls.clear()
-        if filtered_objects:
-            # Ограничение количества результатов (5 штук)
-            for obj in filtered_objects[:5]:
-                object_search_results.controls.append(
-                    ft.ListTile(
-                        title=ft.Text(obj.name),
-                        on_click=lambda e, object_item=obj: select_object(object_item),
-                    )
-                )
-            object_search_results.visible = True
-        else:
-            # Отображение сообщения о том, что ничего не найдено
-            object_search_results.controls.append(
-                ft.Text("Объект не найден", color=ft.Colors.ERROR)
-            )
-            object_search_results.visible = True
-        page.update()
-    
-    # Функция выбора объекта из списка результатов
-    def select_object(obj):
-        # Заполнение поля поиска выбранным названием
-        object_search.value = obj.name
-        # Скрытие списка результатов
-        object_search_results.visible = False
-        # Обновление информации о почасовой ставке и адресе
-        hourly_rate_display.value = f"Почасовая ставка: {float(obj.hourly_rate):.2f} ₽"
-        address_display.value = f"Адрес: {obj.address or 'не указан'}"
-        page.update()
-    
-    hours_dropdown = ft.Dropdown(
-        label="Количество часов",
-        options=[
-            ft.dropdown.Option("12"),
-            ft.dropdown.Option("24")
-        ],
-        value="12", # ставка по умолчанию
-        width=200,
-    )
-    
-    hourly_rate_display = ft.Text("Почасовая ставка: не выбрано", size=16)
-    address_display = ft.Text("Адрес: не выбрано", size=16)
-
-    date_menu = ft.AlertDialog(
-        modal=True,
-        title=ft.Text("Выставление смены на дату"),
-        content=ft.Column([
-            ft.Text(""), # This will be updated with the selected date
-            employee_search,
-            search_results,
-            object_search,
-            object_search_results,
-            hours_dropdown,
-            address_display,
-            hourly_rate_display,
-        ], spacing=10),
-        actions=[
-            ft.TextButton("Сохранить", on_click=lambda e: save_date_assignment(e)),
-            ft.TextButton("Закрыть", on_click=lambda e: close_date_menu(e)),
-        ],
-        actions_alignment=ft.MainAxisAlignment.END,
-    )
-
-    def open_date_menu(date_obj):
-        nonlocal selected_date
-        selected_date = date_obj
-        date_menu.content.controls[0].value = f"Выбрана дата: {date_obj.strftime('%d.%m.%Y')}"
-        page.dialog = date_menu
-        date_menu.open = True
-        page.update()
-
-    def close_date_menu(e):
-        date_menu.open = False
-        page.dialog = None
-        page.update()
-    
-    selected_date = None
-    
-    def save_date_assignment(e):
-        selected_employee_name = employee_search.value
-        selected_object_name = object_search.value
-        selected_hours = hours_dropdown.value
-        
-        if selected_employee_name and selected_object_name and selected_hours and selected_date:
-            try:
-                if db.is_closed():
-                    db.connect()
-                
-                # Находим сотрудника и объект
-                employee = Employee.get(Employee.full_name == selected_employee_name)
-                obj = Object.get(Object.name == selected_object_name)
-                
-                # Сохраняем назначение
-                Assignment.create(
-                    employee=employee,
-                    object=obj,
-                    date=selected_date,
-                    hours=int(selected_hours),
-                    hourly_rate=obj.hourly_rate
-                )
-                
-                # Обновляем зарплату сотрудника
-                salary_increase = float(obj.hourly_rate) * int(selected_hours)
-                new_salary = float(employee.salary) + salary_increase
-                new_hours = employee.hours_worked + int(selected_hours)
-                
-                employee.salary = new_salary
-                employee.hours_worked = new_hours
-                employee.save()
-                
-
-                
-                close_date_menu(e)
-                success_snack = ft.SnackBar(
-                    content=ft.Text(f"Назначение сохранено! Зарплата: {new_salary:.2f} ₽"),
-                    bgcolor=ft.Colors.GREEN,
-                    duration=3000
-                )
-                page.overlay.append(success_snack)
-                success_snack.open = True
-                page.update()
-                
-            except Exception as ex:
-                close_date_menu(e)
-                error_snack = ft.SnackBar(
-                    content=ft.Text(f"Ошибка сохранения: {str(ex)}"),
-                    bgcolor=ft.Colors.RED,
-                    duration=3000
-                )
-                page.overlay.append(error_snack)
-                error_snack.open = True
-                page.update()
-            finally:
-                if not db.is_closed():
-                    db.close()
-        else:
-            close_date_menu(e)
-
-    def on_date_select(e):
-        selected_date_text.value = f"Выбрана дата: {e.control.data.strftime('%d.%m.%Y')}"
-        open_date_menu(e.control.data)
-        page.update()
-
-    def create_day_button(day, date_obj):
-        return ft.ElevatedButton(
-            text=str(day),
-            data=date_obj,
-            on_click=on_date_select,
-            width=40,
-            height=40,
-            style=ft.ButtonStyle(padding=0)
-        )
-
-    def get_calendar_grid(year, month):
-        first_day_of_month = datetime.date(year, month, 1)
-        days_in_month = (datetime.date(year, month + 1, 1) - datetime.date(year, month, 1)).days if month < 12 else (datetime.date(year + 1, 1, 1) - datetime.date(year, 12, 1)).days
-        
-        start_weekday = first_day_of_month.weekday()
-        empty_slots = (start_weekday + 1) % 7
-
-        days = []
-        for _ in range(empty_slots):
-            days.append(ft.Container(width=40, height=40))
-
-        for day in range(1, days_in_month + 1):
-            current_date = datetime.date(year, month, day)
-            days.append(create_day_button(day, current_date))
-
-        while len(days) % 7 != 0:
-            days.append(ft.Container(width=40, height=40))
-
-        return ft.Column(
-            [
-                ft.Row(
-                    [
-                        ft.Text("Пн", weight=ft.FontWeight.BOLD, width=40, text_align=ft.TextAlign.CENTER),
-                        ft.Text("Вт", weight=ft.FontWeight.BOLD, width=40, text_align=ft.TextAlign.CENTER),
-                        ft.Text("Ср", weight=ft.FontWeight.BOLD, width=40, text_align=ft.TextAlign.CENTER),
-                        ft.Text("Чт", weight=ft.FontWeight.BOLD, width=40, text_align=ft.TextAlign.CENTER),
-                        ft.Text("Пт", weight=ft.FontWeight.BOLD, width=40, text_align=ft.TextAlign.CENTER),
-                        ft.Text("Сб", weight=ft.FontWeight.BOLD, width=40, text_align=ft.TextAlign.CENTER),
-                        ft.Text("Вс", weight=ft.FontWeight.BOLD, width=40, text_align=ft.TextAlign.CENTER),
-                    ],
-                    alignment=ft.MainAxisAlignment.CENTER,
-                ),
-                ft.Column(
-                    [
-                        ft.Row(days[i:i+7], alignment=ft.MainAxisAlignment.CENTER)
-                        for i in range(0, len(days), 7)
-                    ]
-                )
+    def _create_dialogs(self):
+        """Создает диалоги"""
+        self.shifts_dialog = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Смены на дату"),
+            content=ft.Column([], scroll=ft.ScrollMode.AUTO, height=400),
+            actions=[
+                ft.TextButton("Добавить смену", on_click=lambda e: self.open_add_shift_dialog()),
+                ft.TextButton("Закрыть", on_click=lambda e: self.close_shifts_dialog())
             ]
         )
-
-    current_year = datetime.date.today().year
-    current_month = datetime.date.today().month
-
-    year_dropdown = ft.Dropdown(
-        width=100,
-        options=[ft.dropdown.Option(str(year)) for year in range(datetime.date.today().year - 10, datetime.date.today().year + 10)],
-        value=str(datetime.date.today().year),
-        on_change=lambda e: change_year(int(e.control.value)),
-    )
-
-    def update_calendar_view():
-        nonlocal current_year, current_month
-        current_month_display.value = datetime.date(current_year, current_month, 1).strftime('%B %Y').capitalize()
-        calendar_grid_container.controls = [get_calendar_grid(current_year, current_month)]
-        year_dropdown.value = str(current_year)
-        page.update()
-
-    def change_month(e):
-        nonlocal current_month, current_year
-        if e.control.icon == ft.Icons.ARROW_LEFT:
-            current_month -= 1
-            if current_month < 1:
-                current_month = 12
-                current_year -= 1
+        
+        self.add_shift_dialog = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Добавить смену"),
+            content=ft.Column([], height=400, scroll=ft.ScrollMode.AUTO),
+            actions=[
+                ft.TextButton("Сохранить", on_click=lambda e: self.save_new_shift()),
+                ft.TextButton("Отмена", on_click=lambda e: self.close_add_shift_dialog())
+            ]
+        )
+        
+        self.edit_dialog = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Редактирование смены"),
+            content=ft.Column([], height=300, scroll=ft.ScrollMode.AUTO),
+            actions=[
+                ft.TextButton("Сохранить", on_click=lambda e: self.save_shift_changes()),
+                ft.TextButton("Удалить", on_click=lambda e: self.confirm_delete_shift(), style=ft.ButtonStyle(color=ft.Colors.RED)),
+                ft.TextButton("Отмена", on_click=lambda e: self.close_edit_dialog())
+            ]
+        )
+        
+        self.delete_confirm_dialog = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Подтвердите удаление"),
+            content=ft.Text("Вы уверены, что хотите удалить эту смену?"),
+            actions=[
+                ft.TextButton("Да", on_click=lambda e: self.delete_shift()),
+                ft.TextButton("Отмена", on_click=lambda e: self.close_delete_confirm())
+            ]
+        )
+    
+    def _create_form_fields(self):
+        """Создает поля форм"""
+        # Поля редактирования смены
+        self.absent_checkbox = ft.Checkbox(label="Пропуск", on_change=lambda e: self.toggle_absent_comment())
+        self.absent_comment_field = ft.TextField(label="Комментарий к пропуску", visible=False, multiline=True)
+        self.deduction_checkbox = ft.Checkbox(label="Удержание", on_change=lambda e: self.toggle_deduction_field())
+        self.deduction_amount_field = ft.TextField(label="Сумма удержания", visible=False)
+        self.bonus_amount_field = ft.TextField(label="Сумма премии", on_change=lambda e: self.toggle_bonus_comment())
+        self.bonus_comment_field = ft.TextField(label="Комментарий к премии", visible=False, multiline=True)
+        
+        # Поля добавления смены
+        self.employee_search = ft.TextField(label="Поиск сотрудника", width=300, on_change=lambda e: self.search_employees(e.control.value))
+        self.search_results = ft.Column(visible=False)
+        self.object_search = ft.TextField(label="Поиск объекта", width=300, on_change=lambda e: self.search_objects(e.control.value))
+        self.object_search_results = ft.Column(visible=False)
+        self.hours_dropdown = ft.Dropdown(label="Количество часов", options=[ft.dropdown.Option("12"), ft.dropdown.Option("24")], value="12", width=200)
+        self.hourly_rate_display = ft.Text("Почасовая ставка: не выбрано", size=16)
+        self.address_display = ft.Text("Адрес: не выбрано", size=16)
+    
+    def close_shifts_dialog(self):
+        self.shifts_dialog.open = False
+        self.page.dialog = None
+        self.page.update()
+    
+    def open_add_shift_dialog(self):
+        self.setup_add_shift_form()
+        self.page.dialog = self.add_shift_dialog
+        self.add_shift_dialog.open = True
+        self.page.update()
+    
+    def close_add_shift_dialog(self):
+        self.add_shift_dialog.open = False
+        self.page.dialog = self.shifts_dialog
+        self.page.update()
+    
+    def close_edit_dialog(self):
+        self.edit_dialog.open = False
+        self.page.dialog = None
+        self.page.update()
+    
+    def confirm_delete_shift(self):
+        self.page.dialog = self.delete_confirm_dialog
+        self.delete_confirm_dialog.open = True
+        self.page.update()
+    
+    def close_delete_confirm(self):
+        self.delete_confirm_dialog.open = False
+        self.page.dialog = self.edit_dialog
+        self.page.update()
+    
+    def delete_shift(self):
+        if self.current_assignment:
+            def operation():
+                self.current_assignment.delete_instance()
+                return True
+            
+            if self.safe_db_operation(operation):
+                # Обновляем кеш для удаленной даты
+                if hasattr(self, '_shifts_cache') and self.current_shift_date in self._shifts_cache:
+                    self._shifts_cache[self.current_shift_date] = max(0, self._shifts_cache[self.current_shift_date] - 1)
+                
+                self.delete_confirm_dialog.open = False
+                self.edit_dialog.open = False
+                self.page.dialog = None
+                self.update_calendar()
+                self.show_shifts_for_date(self.current_shift_date)
+    
+    def toggle_absent_comment(self):
+        self.absent_comment_field.visible = self.absent_checkbox.value
+        self.update_bonus_fields_visibility()
+        self.page.update()
+    
+    def toggle_deduction_field(self):
+        self.deduction_amount_field.visible = self.deduction_checkbox.value
+        self.update_bonus_fields_visibility()
+        self.page.update()
+    
+    def update_bonus_fields_visibility(self):
+        show_bonus = not self.absent_checkbox.value and not self.deduction_checkbox.value
+        self.bonus_amount_field.visible = show_bonus
+        self.bonus_comment_field.visible = show_bonus
+    
+    def toggle_bonus_comment(self):
+        self.bonus_comment_field.visible = not self.absent_checkbox.value
+        self.page.update()
+    
+    def edit_shift(self, assignment):
+        self.current_assignment = assignment
+        
+        self.absent_checkbox.value = assignment.is_absent
+        self.absent_comment_field.value = assignment.absent_comment or ""
+        self.absent_comment_field.visible = assignment.is_absent
+        
+        self.deduction_checkbox.value = float(assignment.deduction_amount) > 0
+        self.deduction_amount_field.value = str(float(assignment.deduction_amount))
+        self.deduction_amount_field.visible = float(assignment.deduction_amount) > 0
+        
+        self.bonus_amount_field.value = str(float(assignment.bonus_amount))
+        self.bonus_comment_field.value = assignment.bonus_comment or ""
+        self.update_bonus_fields_visibility()
+        
+        self.edit_dialog.content.controls = [
+            ft.Text(f"Сотрудник: {assignment.employee.full_name}", weight="bold"),
+            ft.Text(f"Объект: {assignment.object.name}"),
+            ft.Text(f"Дата: {assignment.date.strftime('%d.%m.%Y')}"),
+            ft.Divider(),
+            self.absent_checkbox,
+            self.absent_comment_field,
+            self.deduction_checkbox,
+            self.deduction_amount_field,
+            self.bonus_amount_field,
+            self.bonus_comment_field
+        ]
+        
+        self.page.dialog = self.edit_dialog
+        self.edit_dialog.open = True
+        self.page.update()
+    
+    def save_shift_changes(self):
+        if self.current_assignment:
+            def operation():
+                self.current_assignment.is_absent = self.absent_checkbox.value
+                self.current_assignment.absent_comment = self.absent_comment_field.value if self.absent_checkbox.value else None
+                self.current_assignment.deduction_amount = float(self.deduction_amount_field.value or "0") if self.deduction_checkbox.value else 0
+                self.current_assignment.bonus_amount = float(self.bonus_amount_field.value or "0") if not self.absent_checkbox.value else 0
+                self.current_assignment.bonus_comment = self.bonus_comment_field.value if float(self.bonus_amount_field.value or "0") > 0 and not self.absent_checkbox.value else None
+                self.current_assignment.save()
+                return True
+            
+            if self.safe_db_operation(operation):
+                self.close_edit_dialog()
+                self.update_calendar()
+                self.show_shifts_for_date(self.current_shift_date)
+    
+    def show_shifts_for_date(self, date_obj):
+        self.current_shift_date = date_obj
+        
+        def operation():
+            assignments = Assignment.select().join(Employee).switch(Assignment).join(Object).where(Assignment.date == date_obj)
+            return list(assignments)
+        
+        assignments = self.safe_db_operation(operation) or []
+        
+        self.shifts_dialog.title.value = f"Смены на {date_obj.strftime('%d.%m.%Y')}"
+        self.shifts_dialog.content.controls.clear()
+        
+        if assignments:
+            for assignment in assignments:
+                description_lines = [
+                    ft.Text(f"Сотрудник: {assignment.employee.full_name}", weight="bold"),
+                    ft.Text(f"Объект: {assignment.object.name}"),
+                    ft.Text(f"Часы: {assignment.hours}"),
+                    ft.Text(f"Ставка: {assignment.hourly_rate} ₽/час")
+                ]
+                
+                if assignment.is_absent:
+                    if assignment.absent_comment:
+                        description_lines.append(ft.Text(f"Пропуск: {assignment.absent_comment}", color=ft.Colors.RED))
+                    else:
+                        description_lines.append(ft.Text("Пропуск", color=ft.Colors.RED))
+                
+                if float(assignment.deduction_amount) > 0:
+                    description_lines.append(ft.Text(f"Удержание: {assignment.deduction_amount} ₽", color=ft.Colors.ORANGE))
+                
+                if not assignment.is_absent and float(assignment.bonus_amount) > 0:
+                    if assignment.bonus_comment:
+                        description_lines.append(ft.Text(f"Премия: {assignment.bonus_amount} ₽ - {assignment.bonus_comment}", color=ft.Colors.GREEN))
+                    else:
+                        description_lines.append(ft.Text(f"Премия: {assignment.bonus_amount} ₽", color=ft.Colors.GREEN))
+                
+                self.shifts_dialog.content.controls.append(
+                    ft.Card(
+                        content=ft.Container(
+                            content=ft.Column([
+                                ft.Row([
+                                    ft.Column(description_lines, expand=True),
+                                    ft.IconButton(icon=ft.Icons.EDIT, on_click=lambda e, a=assignment: self.edit_shift(a))
+                                ])
+                            ], spacing=5),
+                            padding=10
+                        )
+                    )
+                )
         else:
-            current_month += 1
-            if current_month > 12:
-                current_month = 1
-                current_year += 1
-        update_calendar_view()
+            self.shifts_dialog.content.controls.append(ft.Text("На эту дату смен нет", size=16, color=ft.Colors.GREY))
+        
+        self.page.dialog = self.shifts_dialog
+        self.shifts_dialog.open = True
+        self.page.update()
+    
+    def get_shifts_count_for_date(self, date_obj):
+        if not hasattr(self, '_shifts_cache'):
+            self._load_shifts_cache()
+        return self._shifts_cache.get(date_obj, 0)
+    
+    def _load_shifts_cache(self):
+        """Загружает количество смен для всего месяца одним запросом"""
+        def operation():
+            first_day = datetime.date(self.current_year, self.current_month, 1)
+            if self.current_month == 12:
+                last_day = datetime.date(self.current_year + 1, 1, 1) - datetime.timedelta(days=1)
+            else:
+                last_day = datetime.date(self.current_year, self.current_month + 1, 1) - datetime.timedelta(days=1)
+            
+            assignments = Assignment.select(Assignment.date, fn.COUNT(Assignment.id).alias('count')).where(
+                (Assignment.date >= first_day) & (Assignment.date <= last_day)
+            ).group_by(Assignment.date)
+            
+            cache = {}
+            for assignment in assignments:
+                cache[assignment.date] = assignment.count
+            return cache
+        
+        self._shifts_cache = self.safe_db_operation(operation) or {}
+    
+    def create_day_cell(self, day, date_obj):
+        shifts_count = self.get_shifts_count_for_date(date_obj)
+        cell_shape = load_cell_shape_from_db()
+        border_radius = 25 if cell_shape == "round" else 5
+        
+        return ft.Container(
+            content=ft.Column([
+                ft.Text(str(day), size=14, weight="bold"),
+                ft.Text(f"{shifts_count}" if shifts_count > 0 else "", size=10, color=ft.Colors.BLUE)
+            ], spacing=2, alignment=ft.MainAxisAlignment.CENTER),
+            width=50,
+            height=50,
+            border=ft.border.all(1, ft.Colors.GREY_400),
+            border_radius=border_radius,
+            on_click=lambda e: self.show_shifts_for_date(date_obj),
+            alignment=ft.alignment.center
+        )
+    
+    def get_calendar_grid(self, year, month):
+        first_day = datetime.date(year, month, 1)
+        if month == 12:
+            days_in_month = (datetime.date(year + 1, 1, 1) - first_day).days
+        else:
+            days_in_month = (datetime.date(year, month + 1, 1) - first_day).days
+        
+        start_weekday = first_day.weekday()
+        empty_slots = start_weekday
+        
+        days = []
+        for _ in range(empty_slots):
+            days.append(ft.Container(width=50, height=50))
+        
+        for day in range(1, days_in_month + 1):
+            current_date = datetime.date(year, month, day)
+            days.append(self.create_day_cell(day, current_date))
+        
+        while len(days) % 7 != 0:
+            days.append(ft.Container(width=50, height=50))
+        
+        return ft.Column([
+            ft.Row([
+                ft.Text("Пн", weight="bold", width=50, text_align=ft.TextAlign.CENTER),
+                ft.Text("Вт", weight="bold", width=50, text_align=ft.TextAlign.CENTER),
+                ft.Text("Ср", weight="bold", width=50, text_align=ft.TextAlign.CENTER),
+                ft.Text("Чт", weight="bold", width=50, text_align=ft.TextAlign.CENTER),
+                ft.Text("Пт", weight="bold", width=50, text_align=ft.TextAlign.CENTER),
+                ft.Text("Сб", weight="bold", width=50, text_align=ft.TextAlign.CENTER),
+                ft.Text("Вс", weight="bold", width=50, text_align=ft.TextAlign.CENTER)
+            ], alignment=ft.MainAxisAlignment.CENTER),
+            ft.Column([
+                ft.Row(days[i:i+7], alignment=ft.MainAxisAlignment.CENTER)
+                for i in range(0, len(days), 7)
+            ])
+        ])
+    
+    def update_calendar(self):
+        # Сбрасываем кеш при смене месяца
+        if hasattr(self, '_shifts_cache'):
+            delattr(self, '_shifts_cache')
+        
+        self.current_month_display.value = f"{RUSSIAN_MONTHS[self.current_month]} {self.current_year}"
+        self.calendar_grid_container.controls = [self.get_calendar_grid(self.current_year, self.current_month)]
+        if self.page:
+            self.page.update()
+    
+    def change_month(self, direction):
+        if direction == -1:
+            self.current_month -= 1
+            if self.current_month < 1:
+                self.current_month = 12
+                self.current_year -= 1
+        else:
+            self.current_month += 1
+            if self.current_month > 12:
+                self.current_month = 1
+                self.current_year += 1
+        self.update_calendar()
+    
+    def search_employees(self, query):
+        if not query or len(query) < 2:
+            self.search_results.visible = False
+            self.page.update()
+            return
+        
+        def operation():
+            from datetime import date
+            today = date.today()
+            
+            employees = []
+            all_employees = Employee.select().where(
+                (Employee.full_name.contains(query)) & 
+                (Employee.termination_date.is_null())
+            )
+            
+            for emp in all_employees:
+                valid = True
+                
+                if emp.guard_license_date:
+                    guard_expiry = emp.guard_license_date.replace(year=emp.guard_license_date.year + 5)
+                    if guard_expiry < today:
+                        valid = False
+                
+                if emp.medical_exam_date:
+                    medical_expiry = emp.medical_exam_date.replace(year=emp.medical_exam_date.year + 1)
+                    if medical_expiry < today:
+                        valid = False
+                
+                if emp.periodic_check_date:
+                    periodic_expiry = emp.periodic_check_date.replace(year=emp.periodic_check_date.year + 1)
+                    if periodic_expiry < today:
+                        valid = False
+                
+                if valid:
+                    employees.append(emp)
+            
+            return employees[:5]
+        
+        employees = self.safe_db_operation(operation) or []
+        
+        self.search_results.controls.clear()
+        if employees:
+            for emp in employees:
+                self.search_results.controls.append(
+                    ft.ListTile(title=ft.Text(emp.full_name), on_click=lambda e, employee=emp: self.select_employee(employee))
+                )
+            self.search_results.visible = True
+        else:
+            self.search_results.controls.append(ft.Text("Сотрудник не найден", color=ft.Colors.ERROR))
+            self.search_results.visible = True
+        self.page.update()
+    
+    def select_employee(self, employee):
+        self.employee_search.value = employee.full_name
+        self.search_results.visible = False
+        self.page.update()
+    
+    def search_objects(self, query):
+        if not query or len(query) < 2:
+            self.object_search_results.visible = False
+            self.page.update()
+            return
+        
+        def operation():
+            return list(Object.select().where(Object.name.contains(query))[:5])
+        
+        objects = self.safe_db_operation(operation) or []
+        
+        self.object_search_results.controls.clear()
+        if objects:
+            for obj in objects:
+                self.object_search_results.controls.append(
+                    ft.ListTile(title=ft.Text(obj.name), on_click=lambda e, object_item=obj: self.select_object(object_item))
+                )
+            self.object_search_results.visible = True
+        else:
+            self.object_search_results.controls.append(ft.Text("Объект не найден", color=ft.Colors.ERROR))
+            self.object_search_results.visible = True
+        self.page.update()
+    
+    def select_object(self, obj):
+        self.object_search.value = obj.name
+        self.object_search_results.visible = False
+        self.hourly_rate_display.value = f"Почасовая ставка: {float(obj.hourly_rate):.2f} ₽"
+        self.address_display.value = f"Адрес: {obj.address or 'не указан'}"
+        self.page.update()
+    
+    def setup_add_shift_form(self):
+        self.employee_search.value = ""
+        self.object_search.value = ""
+        self.hours_dropdown.value = "12"
+        self.search_results.visible = False
+        self.object_search_results.visible = False
+        self.hourly_rate_display.value = "Почасовая ставка: не выбрано"
+        self.address_display.value = "Адрес: не выбрано"
+        
+        self.add_shift_dialog.content.controls = [
+            ft.Text(f"Дата: {self.current_shift_date.strftime('%d.%m.%Y')}", weight="bold"),
+            self.employee_search,
+            self.search_results,
+            self.object_search,
+            self.object_search_results,
+            self.hours_dropdown,
+            self.address_display,
+            self.hourly_rate_display
+        ]
+    
+    def save_new_shift(self):
+        if not self.employee_search.value or not self.object_search.value or not self.hours_dropdown.value:
+            return
+        
+        def operation():
+            employee = Employee.get(Employee.full_name == self.employee_search.value)
+            obj = Object.get(Object.name == self.object_search.value)
+            
+            Assignment.create(
+                employee=employee,
+                object=obj,
+                date=self.current_shift_date,
+                hours=int(self.hours_dropdown.value),
+                hourly_rate=obj.hourly_rate
+            )
+            
+            salary_increase = float(obj.hourly_rate) * int(self.hours_dropdown.value)
+            new_salary = float(employee.salary) + salary_increase
+            new_hours = employee.hours_worked + int(self.hours_dropdown.value)
+            
+            employee.salary = new_salary
+            employee.hours_worked = new_hours
+            employee.save()
+            return True
+        
+        if self.safe_db_operation(operation):
+            # Обновляем кеш для добавленной даты
+            if hasattr(self, '_shifts_cache'):
+                self._shifts_cache[self.current_shift_date] = self._shifts_cache.get(self.current_shift_date, 0) + 1
+            
+            self.close_add_shift_dialog()
+            self.update_calendar()
+            self.show_shifts_for_date(self.current_shift_date)
+    
+    def render(self) -> ft.Column:
+        """Возвращает интерфейс страницы"""
+        # Добавляем диалоги в overlay страницы
+        if self.edit_dialog not in self.page.overlay:
+            self.page.overlay.append(self.edit_dialog)
+        if self.delete_confirm_dialog not in self.page.overlay:
+            self.page.overlay.append(self.delete_confirm_dialog)
+        if self.add_shift_dialog not in self.page.overlay:
+            self.page.overlay.append(self.add_shift_dialog)
+        
+        return ft.Column([
+            ft.Text("Календарь смен", size=24, weight="bold"),
+            ft.Divider(),
+            ft.Row([
+                ft.IconButton(ft.Icons.ARROW_LEFT, on_click=lambda e: self.change_month(-1)),
+                self.current_month_display,
+                ft.IconButton(ft.Icons.ARROW_RIGHT, on_click=lambda e: self.change_month(1))
+            ], alignment=ft.MainAxisAlignment.CENTER),
+            self.calendar_grid_container
+        ], spacing=10, expand=True, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
 
-    def change_year(year):
-        nonlocal current_year
-        current_year = year
-        update_calendar_view()
-
-    update_calendar_view()
-
-    calendar_content = ft.Column(
-        [
-            selected_date_text,
-            ft.Row(
-                [
-                    ft.IconButton(ft.Icons.ARROW_LEFT, on_click=change_month),
-                    current_month_display,
-                    ft.IconButton(ft.Icons.ARROW_RIGHT, on_click=change_month),
-                    year_dropdown,
-                ],
-                alignment=ft.MainAxisAlignment.CENTER,
-            ),
-            calendar_grid_container,
-        ],
-        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-    )
-    return calendar_content, date_menu
+# Функция-обертка для совместимости
+def calendar_page(page: ft.Page = None):
+    calendar_instance = CalendarPage(page)
+    return calendar_instance.render(), calendar_instance.shifts_dialog

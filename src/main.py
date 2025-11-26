@@ -9,7 +9,7 @@ from views.office_employees import office_employees_page
 from views.settings import settings_page, load_theme_from_db
 import os
 from views.objects import objects_page
-from views.shifts2 import shifts2_page
+from views.calendar import calendar_page
 from views.statistics import statistics_page
 from views.notes import notes_page
 from views.terminated import terminated_page
@@ -114,7 +114,7 @@ def main(page: ft.Page):
             content_container.content = objects_page(page)
 
         elif selected_index == 6:
-            shifts_content, shifts_dialog = shifts2_page(page)
+            shifts_content, shifts_dialog = calendar_page(page)
             content_container.content = shifts_content
             
             if shifts_dialog not in page.overlay:

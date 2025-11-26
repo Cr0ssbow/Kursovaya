@@ -1,257 +1,159 @@
 import flet as ft
-from database.models import ChiefEmployee, db
+from database.models import ChiefEmployee
 from datetime import datetime
+from base.base_employee_page import BaseEmployeePage
 
-def format_date(date):
-    """Форматирует дату в строку дд.мм.гггг"""
-    return date.strftime("%d.%m.%Y") if date else "Не указано"
-
-def chief_employees_page(page: ft.Page = None) -> ft.Column:
-    current_page = 0
-    page_size = 13
-    search_value = ""
+class ChiefEmployeesPage(BaseEmployeePage):
+    """Страница начальников охраны"""
     
-    def format_date_input(e):
-        """Автоматически форматирует ввод даты"""
-        value = e.control.value.replace(".", "")
-        if len(value) == 8 and value.isdigit():
-            day = int(value[:2])
-            month = int(value[2:4])
-            year = int(value[4:])
-            
-            if day > 31:
-                day = 31
-            if month > 12:
-                month = 12
-            if year > 2100:
-                year = 2100
-                
-            formatted = f"{day:02d}.{month:02d}.{year}"
-            e.control.value = formatted
-            if page:
-                page.update()
+    def _create_form_fields(self):
+        """Создает поля формы"""
+        self.name_field = ft.TextField(label="ФИО", width=300)
+        self.birth_field = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=180, on_change=self.format_date_input, max_length=10)
+        self.position_field = ft.TextField(label="Должность", width=250)
+        self.salary_field = ft.TextField(label="Зарплата", width=150)
+        self.payment_method_field = ft.Dropdown(label="Способ выдачи зарплаты", width=250, options=[ft.dropdown.Option("на карту"), ft.dropdown.Option("на руки")], value="на карту")
+        self.company_field = ft.Dropdown(label="Компания", width=150, options=[ft.dropdown.Option("Легион"), ft.dropdown.Option("Норд")], value="Легион")
     
-    # Диалог и поля формы
-    add_dialog = ft.AlertDialog(modal=True)
-    name_field = ft.TextField(label="ФИО", width=300)
-    birth_field = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=180, on_change=format_date_input, max_length=10)
-    position_field = ft.TextField(label="Должность", width=250)
-    salary_field = ft.TextField(label="Зарплата", width=150)
-    payment_method_field = ft.Dropdown(label="Способ выдачи зарплаты", width=250, options=[ft.dropdown.Option("на карту"), ft.dropdown.Option("на руки")], value="на карту")
-
-    def show_add_dialog(e):
-        add_dialog.title = ft.Text("Добавить начальника охраны")
-        add_dialog.content = ft.Column([
-            name_field,
-            birth_field,
-            position_field,
-            salary_field,
-            payment_method_field,
-        ], spacing=10)
-        add_dialog.actions = [
-            ft.TextButton("Сохранить", on_click=save_employee),
-            ft.TextButton("Отмена", on_click=close_add_dialog),
-        ]
-        add_dialog.open = True
-        if page and add_dialog not in page.overlay:
-            page.overlay.append(add_dialog)
-        if page:
-            page.update()
-
-    def close_add_dialog(e):
-        add_dialog.open = False
-        if page:
-            page.update()
-
-    def save_employee(e):
-        try:
-            if db.is_closed():
-                db.connect()
-            
-            full_name = name_field.value.strip()
-            birth_value = birth_field.value.strip()
-            position_value = position_field.value.strip()
-            salary_value = salary_field.value.strip()
-            payment_method_value = payment_method_field.value
-            
-            if not full_name:
-                raise ValueError("ФИО обязательно!")
-            if not birth_value:
-                raise ValueError("Дата рождения обязательна!")
-            if not position_value:
-                raise ValueError("Должность обязательна!")
-            
-            birth_date = datetime.strptime(birth_value, "%d.%m.%Y").date()
-            salary = float(salary_value) if salary_value else 0
-            
-            ChiefEmployee.create(
-                full_name=full_name,
-                birth_date=birth_date,
-                position=position_value,
-                salary=salary,
-                payment_method=payment_method_value or "на карту"
-            )
-            close_add_dialog(e)
-            refresh_table()
-            if page:
-                page.update()
-        except ValueError as ex:
-            add_dialog.content = ft.Column([
-                name_field,
-                birth_field,
-                position_field,
-                salary_field,
-                payment_method_field,
-                ft.Text(f"Ошибка: {str(ex)}", color=ft.Colors.RED)
-            ], spacing=10)
-            if page:
-                page.update()
-        except Exception as ex:
-            print(f"Ошибка сохранения: {ex}")
-        finally:
-            if not db.is_closed():
-                db.close()
-
-    def refresh_table():
-        """Обновляет данные в таблице"""
-        query = ChiefEmployee.select().where(ChiefEmployee.termination_date.is_null())
-        
-        if search_value:
-            query = query.where(ChiefEmployee.full_name.contains(search_value))
-        
-        employees_list = list(query.order_by(ChiefEmployee.full_name))
-        
-        # Пагинация
-        start_idx = current_page * page_size
-        end_idx = start_idx + page_size
-        page_employees = employees_list[start_idx:end_idx]
-        
-        employees_table.rows.clear()
-        for employee in page_employees:
-            employees_table.rows.append(
-                ft.DataRow(
-                    cells=[
-                        ft.DataCell(ft.Text(employee.full_name, color=ft.Colors.BLUE), on_tap=lambda e, emp=employee: show_detail_dialog(emp)),
-                        ft.DataCell(ft.Text(employee.position)),
-                    ]
-                )
-            )
-        
-        # Обновляем кнопки пагинации
-        total_pages = (len(employees_list) + page_size - 1) // page_size
-        prev_btn.disabled = current_page == 0
-        next_btn.disabled = current_page >= total_pages - 1
-        page_info.value = f"Страница {current_page + 1} из {max(1, total_pages)}"
-
-    def on_search_change(e):
-        nonlocal search_value, current_page
-        search_value = e.control.value.strip()
-        current_page = 0
-        refresh_table()
-        if page:
-            page.update()
+    def _create_table(self):
+        """Создает таблицу"""
+        self.employees_table = ft.DataTable(
+            columns=[
+                ft.DataColumn(ft.Text("ФИО", width=400)),
+                ft.DataColumn(ft.Text("Должность", width=200)),
+            ],
+            rows=[],
+            horizontal_lines=ft.border.BorderSide(1, ft.Colors.OUTLINE),
+            vertical_lines=ft.border.BorderSide(1, ft.Colors.OUTLINE),
+            heading_row_height=70,
+            data_row_min_height=50,
+            data_row_max_height=50,
+            column_spacing=10,
+            width=4000,
+            height=707
+        )
     
-    def prev_page(e):
-        nonlocal current_page
-        if current_page > 0:
-            current_page -= 1
-            refresh_table()
-            if page:
-                page.update()
+    def _get_base_query(self):
+        return ChiefEmployee.select().where(ChiefEmployee.termination_date.is_null())
     
-    def next_page(e):
-        nonlocal current_page
-        current_page += 1
-        refresh_table()
-        if page:
-            page.update()
+    def _apply_name_filter(self, query):
+        return query.where(ChiefEmployee.full_name.contains(self.search_value))
     
-    # Элементы пагинации
-    prev_btn = ft.IconButton(icon=ft.Icons.ARROW_BACK, on_click=prev_page)
-    next_btn = ft.IconButton(icon=ft.Icons.ARROW_FORWARD, on_click=next_page)
-    page_info = ft.Text("Страница 1 из 1")
+    def _apply_company_filter(self, query, companies):
+        return query.where(ChiefEmployee.company.in_(companies))
     
-    # Диалог детальной информации
-    detail_dialog = ft.AlertDialog(modal=True)
+    def _get_order_field(self):
+        return ChiefEmployee.full_name
     
-    def show_detail_dialog(employee):
-        detail_dialog.title = ft.Text(f"Информация о начальнике: {employee.full_name}")
-        detail_dialog.content = ft.Column([
-            ft.Text(f"Дата рождения: {format_date(employee.birth_date)}", size=16),
+    def _create_table_row(self, employee):
+        return ft.DataRow(cells=[
+            ft.DataCell(ft.Text(employee.full_name), on_tap=lambda e, emp=employee: self.show_detail_dialog(emp)),
+            ft.DataCell(ft.Text(employee.position)),
+        ])
+    
+    def _get_detail_title(self):
+        return "Информация о начальнике"
+    
+    def _get_detail_content(self, employee):
+        return [
+            ft.Text(f"Дата рождения: {self.format_date(employee.birth_date)}", size=16),
             ft.Text(f"Должность: {employee.position}", size=16),
             ft.Text(f"Зарплата: {employee.salary} ₽", size=16),
             ft.Text(f"Способ выдачи зарплаты: {employee.payment_method}", size=16),
-        ], spacing=10, height=200)
-        detail_dialog.actions = [
-            ft.TextButton("Закрыть", on_click=lambda e: close_detail_dialog()),
+            ft.Text(f"Компания: {getattr(employee, 'company', 'Легион')}", size=16),
         ]
-        detail_dialog.open = True
-        if page and detail_dialog not in page.overlay:
-            page.overlay.append(detail_dialog)
-        if page:
-            page.update()
     
-    def close_detail_dialog():
-        detail_dialog.open = False
-        if page:
-            page.update()
+    def _get_add_title(self):
+        return "Добавить начальника охраны"
     
-    # Создаем DataTable
-    employees_table = ft.DataTable(
-        columns=[
-            ft.DataColumn(ft.Text("ФИО", width=400)),
-            ft.DataColumn(ft.Text("Должность", width=200)),
-        ],
-        rows=[],
-        horizontal_lines=ft.border.BorderSide(1, ft.Colors.OUTLINE),
-        vertical_lines=ft.border.BorderSide(1, ft.Colors.OUTLINE),
-        heading_row_height=70,
-        data_row_min_height=50,
-        data_row_max_height=50,
-        column_spacing=10,
-        width=700,
-        height=707
-    )
-    refresh_table()
+    def _get_form_fields(self):
+        return [self.name_field, self.birth_field, self.position_field, self.salary_field, self.payment_method_field, self.company_field]
     
-    return ft.Column(
-        [
-            ft.Row(
-                [
-                    ft.Text("Начальники охраны", size=24, weight="bold"),
-                    ft.ElevatedButton(
-                        "Добавить начальника",
-                        icon=ft.Icons.ADD,
-                        on_click=show_add_dialog,
-                    ),
-                ],
-                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-            ),
-            ft.Divider(),
-            ft.Row([
-                ft.TextField(
-                    label="Поиск по ФИО",
-                    width=300,
-                    on_change=on_search_change,
-                    autofocus=False,
-                    dense=True,
-                ),
-            ], alignment=ft.MainAxisAlignment.START),
-            ft.Container(
-                content=ft.Column([
-                    employees_table
-                ], scroll=ft.ScrollMode.AUTO),
-                border=ft.border.all(1, ft.Colors.OUTLINE),
-                border_radius=10,
-                padding=10,
-                expand=True,
-            ),
-            ft.Row([
-                prev_btn,
-                page_info,
-                next_btn,
-            ], alignment=ft.MainAxisAlignment.CENTER),
-        ],
-        spacing=10,
-        expand=True,
-    )
+    def _save_operation(self):
+        full_name = self.name_field.value.strip()
+        birth_value = self.birth_field.value.strip()
+        position_value = self.position_field.value.strip()
+        salary_value = self.salary_field.value.strip()
+        payment_method_value = self.payment_method_field.value
+        
+        if not full_name:
+            raise ValueError("ФИО обязательно!")
+        if not birth_value:
+            raise ValueError("Дата рождения обязательна!")
+        if not position_value:
+            raise ValueError("Должность обязательна!")
+        
+        birth_date = datetime.strptime(birth_value, "%d.%m.%Y").date()
+        salary = float(salary_value) if salary_value else 0
+        
+        ChiefEmployee.create(
+            full_name=full_name,
+            birth_date=birth_date,
+            position=position_value,
+            salary=salary,
+            payment_method=payment_method_value or "на карту",
+            company=self.company_field.value or "Легион"
+        )
+        return True
+    
+    def _get_success_message(self):
+        return "Начальник добавлен!"
+    
+    def _get_page_title(self):
+        return "Начальники охраны"
+    
+    def _get_add_button_text(self):
+        return "Добавить начальника"
+    
+    def _create_edit_fields(self):
+        """Создает поля редактирования"""
+        self.edit_name_field = ft.TextField(label="ФИО", width=300)
+        self.edit_birth_field = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=180, on_change=self.format_date_input, max_length=10)
+        self.edit_position_field = ft.TextField(label="Должность", width=250)
+        self.edit_salary_field = ft.TextField(label="Зарплата", width=150)
+        self.edit_payment_method_field = ft.Dropdown(label="Способ выдачи зарплаты", width=250, options=[ft.dropdown.Option("на карту"), ft.dropdown.Option("на руки")])
+        self.edit_company_field = ft.Dropdown(label="Компания", width=150, options=[ft.dropdown.Option("Легион"), ft.dropdown.Option("Норд")])
+    
+    def _get_edit_fields(self):
+        return [self.edit_name_field, self.edit_birth_field, self.edit_position_field, self.edit_salary_field, self.edit_payment_method_field, self.edit_company_field]
+    
+    def _populate_edit_fields(self, employee):
+        self.edit_name_field.value = employee.full_name
+        self.edit_birth_field.value = self.format_date(employee.birth_date)
+        self.edit_position_field.value = employee.position
+        self.edit_salary_field.value = str(employee.salary)
+        self.edit_payment_method_field.value = employee.payment_method
+        self.edit_company_field.value = getattr(employee, 'company', 'Легион')
+    
+    def _save_edit_operation(self):
+        full_name = self.edit_name_field.value.strip()
+        birth_value = self.edit_birth_field.value.strip()
+        position_value = self.edit_position_field.value.strip()
+        salary_value = self.edit_salary_field.value.strip()
+        payment_method_value = self.edit_payment_method_field.value
+        
+        if not full_name:
+            raise ValueError("ФИО обязательно!")
+        if not birth_value or birth_value == "Не указано":
+            raise ValueError("Дата рождения обязательна!")
+        if not position_value:
+            raise ValueError("Должность обязательна!")
+        
+        birth_date = datetime.strptime(birth_value, "%d.%m.%Y").date()
+        salary = float(salary_value) if salary_value else 0
+        
+        self.current_employee.full_name = full_name
+        self.current_employee.birth_date = birth_date
+        self.current_employee.position = position_value
+        self.current_employee.salary = salary
+        self.current_employee.payment_method = payment_method_value or "на карту"
+        self.current_employee.company = self.edit_company_field.value or "Легион"
+        self.current_employee.save()
+        return True
+    
+    def _get_employee_type(self):
+        return "начальника"
+
+# Функция-обертка для совместимости
+def chief_employees_page(page: ft.Page = None) -> ft.Column:
+    return ChiefEmployeesPage(page).render()

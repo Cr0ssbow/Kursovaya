@@ -1,561 +1,237 @@
 import flet as ft
-from database.models import Employee, Assignment, db
+from database.models import GuardEmployee
 from datetime import datetime
+from base.base_employee_page import BaseEmployeePage
 
-def load_employees():
-    """Загружает список активных сотрудников из БД"""
-    return Employee.select().where(Employee.termination_date.is_null()).order_by(Employee.full_name)
-
-def format_date(date):
-    """Форматирует дату в строку дд.мм.гггг"""
-    return date.strftime("%d.%m.%Y") if date else "Не указано"
-
-def format_salary(salary):
-    """Форматирует зарплату в строку с разделителями"""
-    n = int(float(salary) * 100)
-    formatted = ""
-    count = 0
+class EmployeesPage(BaseEmployeePage):
+    """Страница сотрудников охраны"""
     
-    while n > 0:
-        if count > 0 and count % 3 == 0:
-            formatted = " " + formatted
-        formatted = str(n % 10) + formatted
-        n = n // 10
-        count += 1
+    def __init__(self, page: ft.Page):
+        self.selected_rank = "Все разряды"
+        super().__init__(page)
     
-    if len(formatted) > 2:
-        formatted = formatted[:-2] + "," + formatted[-2:]
-    else:
-        formatted = "0," + formatted.zfill(2)
+    def _create_form_fields(self):
+        """Создает поля формы"""
+        self.name_field = ft.TextField(label="ФИО", width=300)
+        self.birth_field = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=180, on_change=self.format_date_input, max_length=10)
+        self.certificate_field = ft.TextField(label="Номер удостоверения (буква№ 000000)", width=200, max_length=9, on_change=self._format_certificate_input)
+        self.guard_license_field = ft.TextField(label="Дата выдачи УЧО (дд.мм.гггг)", width=250, on_change=self.format_date_input, max_length=10)
+        self.medical_exam_field = ft.TextField(label="Дата прохождения медкомиссии (дд.мм.гггг)", width=250, on_change=self.format_date_input, max_length=10)
+        self.periodic_check_field = ft.TextField(label="Дата прохождения периодической проверки (дд.мм.гггг)", width=250, on_change=self.format_date_input, max_length=10)
+        self.guard_rank_field = ft.Dropdown(label="Разряд охранника", width=180, options=[ft.dropdown.Option(str(i)) for i in range(3, 7)])
+        self.payment_method_field = ft.Dropdown(label="Способ выдачи зарплаты", width=250, options=[ft.dropdown.Option("на карту"), ft.dropdown.Option("на руки")], value="на карту")
     
-    return formatted + " ₽"
-
-employees_table = None
-
-def employees_page(page: ft.Page = None) -> ft.Column:
-    sort_column = "full_name"
-    sort_reverse = False
-    current_page = 0
-    page_size = 13
-    global employees_table
+    def _create_edit_fields(self):
+        """Создает поля редактирования"""
+        self.edit_name_field = ft.TextField(label="ФИО", width=300)
+        self.edit_birth_field = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=180, on_change=self.format_date_input, max_length=10)
+        self.edit_certificate_field = ft.TextField(label="Номер удостоверения (буква№ 000000)", width=200, max_length=9, on_change=self._format_certificate_input)
+        self.edit_guard_license_field = ft.TextField(label="Дата выдачи УЧО (дд.мм.гггг)", width=250, on_change=self.format_date_input, max_length=10)
+        self.edit_medical_exam_field = ft.TextField(label="Дата прохождения медкомиссии (дд.мм.гггг)", width=250, on_change=self.format_date_input, max_length=10)
+        self.edit_periodic_check_field = ft.TextField(label="Дата прохождения периодической проверки (дд.мм.гггг)", width=250, on_change=self.format_date_input, max_length=10)
+        self.edit_guard_rank_field = ft.Dropdown(label="Разряд охранника", width=180, options=[ft.dropdown.Option(str(i)) for i in range(3, 7)])
+        self.edit_payment_method_field = ft.Dropdown(label="Способ выдачи зарплаты", width=250, options=[ft.dropdown.Option("на карту"), ft.dropdown.Option("на руки")])
+        self.edit_company_field = ft.Dropdown(label="Компания", width=150, options=[ft.dropdown.Option("Легион"), ft.dropdown.Option("Норд")])
     
-    def format_date_input(e):
-        """Автоматически форматирует ввод даты"""
-        value = e.control.value.replace(".", "")
-        if len(value) == 8 and value.isdigit():
-            day = int(value[:2])
-            month = int(value[2:4])
-            year = int(value[4:])
-            
-            if day > 31:
-                day = 31
-            if month > 12:
-                month = 12
-            if year > 2100:
-                year = 2100
-                
-            formatted = f"{day:02d}.{month:02d}.{year}"
-            e.control.value = formatted
-            if page:
-                page.update()
+    def _create_table(self):
+        """Создает таблицу"""
+        self.employees_table = ft.DataTable(
+            columns=[
+                ft.DataColumn(ft.Text("ФИО", width=400)),
+                ft.DataColumn(ft.Text("Разряд", width=100)),
+            ],
+            rows=[],
+            horizontal_lines=ft.border.BorderSide(1, ft.Colors.OUTLINE),
+            vertical_lines=ft.border.BorderSide(1, ft.Colors.OUTLINE),
+            heading_row_height=70,
+            data_row_min_height=50,
+            data_row_max_height=50,
+            column_spacing=10,
+            width=600,
+            height=707
+        )
     
-    # Диалог и поля формы
-    add_dialog = ft.AlertDialog(modal=True)
-    name_field = ft.TextField(label="ФИО", width=300)
-    birth_field = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=180, on_change=format_date_input, max_length=10)
-    def format_certificate_input(e):
-        value = e.control.value.upper().replace("№", "").replace(" ", "")
-        if len(value) > 0 and value[0].isalpha():
-            letter = value[0]
-            numbers = ''.join(filter(str.isdigit, value[1:]))[:6]
-            if numbers:
-                e.control.value = f"{letter}№ {numbers}"
-            else:
-                e.control.value = f"{letter}№ "
-        elif len(value) > 0 and not value[0].isalpha():
-            e.control.value = ""
-        page.update()
+    def _get_base_query(self):
+        return GuardEmployee.select().where(GuardEmployee.termination_date.is_null())
     
-    certificate_field = ft.TextField(label="Номер удостоверения (буква№ 000000)", width=200, max_length=9, on_change=format_certificate_input)
-    guard_license_field = ft.TextField(label="Дата выдачи УЧО (дд.мм.гггг)", width=250, on_change=format_date_input, max_length=10)
-    medical_exam_field = ft.TextField(label="Дата прохождения медкомиссии (дд.мм.гггг)", width=250, on_change=format_date_input, max_length=10)
-    periodic_check_field = ft.TextField(label="Дата прохождения периодической проверки (дд.мм.гггг)", width=250, on_change=format_date_input, max_length=10)
-    guard_rank_field = ft.Dropdown(label="Разряд охранника", width=180, options=[ft.dropdown.Option(str(i)) for i in range(3, 7)])
-    payment_method_field = ft.Dropdown(label="Способ выдачи зарплаты", width=250, options=[ft.dropdown.Option("на карту"), ft.dropdown.Option("на руки")], value="на карту")
-
-    def show_add_dialog(e):
-        add_dialog.title = ft.Text("Добавить сотрудника")
-        add_dialog.content = ft.Column([
-            name_field,
-            birth_field,
-            certificate_field,
-            guard_license_field,
-            medical_exam_field,
-            periodic_check_field,
-            guard_rank_field,
-            payment_method_field,
-        ], spacing=10)
-        add_dialog.actions = [
-            ft.TextButton("Сохранить", on_click=save_employee),
-            ft.TextButton("Отмена", on_click=close_add_dialog),
-        ]
-        add_dialog.open = True
-        if page and add_dialog not in page.overlay:
-            page.overlay.append(add_dialog)
-        if page:
-            page.update()
-
-    def close_add_dialog(e):
-        add_dialog.open = False
-        if page:
-            page.update()
-
-    def save_employee(e):
-        from database.models import Employee, db
-        from datetime import datetime
-        try:
-            if db.is_closed():
-                db.connect()
-            
-            full_name = name_field.value.strip()
-            birth_value = birth_field.value.strip()
-            certificate_value = certificate_field.value.strip()
-            guard_license_value = guard_license_field.value.strip()
-            guard_rank_value = guard_rank_field.value
-            medical_exam_value = medical_exam_field.value.strip()
-            periodic_check_value = periodic_check_field.value.strip()
-            payment_method_value = payment_method_field.value
-            
-            if not full_name:
-                raise ValueError("ФИО обязательно!")
-            if not birth_value:
-                raise ValueError("Дата рождения обязательна!")
-            if certificate_value and not (len(certificate_value) == 9 and certificate_value[0].isalpha() and certificate_value[1:3] == '№ ' and certificate_value[3:].isdigit()):
-                raise ValueError("Номер удостоверения должен быть в формате: буква№ 000000!")
-            
-            birth_date = datetime.strptime(birth_value, "%d.%m.%Y").date()
-
-            guard_license_date = datetime.strptime(guard_license_value, "%d.%m.%Y").date() if guard_license_value else None
-            guard_rank = int(guard_rank_value) if guard_rank_value else None
-            medical_exam_date = datetime.strptime(medical_exam_value, "%d.%m.%Y").date() if medical_exam_value else None
-            periodic_check_date = datetime.strptime(periodic_check_value, "%d.%m.%Y").date() if periodic_check_value else None
-            
-            Employee.create(
-                full_name=full_name,
-                birth_date=birth_date,
-                certificate_number=certificate_value or None,
-                guard_license_date=guard_license_date,
-                guard_rank=guard_rank,
-                medical_exam_date=medical_exam_date,
-                periodic_check_date=periodic_check_date,
-                payment_method=payment_method_value or "на карту"
-            )
-            close_add_dialog(e)
-            refresh_table()
-            if page:
-                page.update()
-        except ValueError as ex:
-            add_dialog.content = ft.Column([
-                name_field,
-                birth_field,
-                certificate_field,
-                guard_license_field,
-                medical_exam_field,
-                periodic_check_field,
-                guard_rank_field,
-                payment_method_field,
-                ft.Text(f"Ошибка: {str(ex)}", color=ft.Colors.RED)
-            ], spacing=10)
-            if page:
-                page.update()
-        except Exception as ex:
-            print(f"Ошибка сохранения: {ex}")
-        finally:
-            if not db.is_closed():
-                db.close()
-    
-    search_value = ""
-    selected_rank = "Все разряды"
-
-    def refresh_table():
-        """Обновляет данные в таблице с учетом поиска и пагинации"""
-        query = Employee.select().where(Employee.termination_date.is_null())
+    def _apply_search_filter(self, query):
+        # Сначала применяем базовую фильтрацию
+        query = super()._apply_search_filter(query)
         
-        if search_value:
-            query = query.where(Employee.full_name.contains(search_value))
+        # Затем добавляем фильтр по разряду
+        if self.selected_rank != "Все разряды":
+            query = query.where(GuardEmployee.guard_rank == int(self.selected_rank))
         
-        if selected_rank != "Все разряды":
-            query = query.where(Employee.guard_rank == int(selected_rank))
-        
-        employees_list = list(query.order_by(Employee.full_name))
-        # Сортировка
-        def key(emp):
-            if sort_column == "full_name":
-                return emp.full_name
-            elif sort_column == "birth_date":
-                return emp.birth_date
-            elif sort_column == "certificate_number":
-                return emp.certificate_number or ""
-            elif sort_column == "salary":
-                return float(emp.salary)
-            return emp.full_name
-        employees_list.sort(key=key, reverse=sort_reverse)
-        
-        # Пагинация
-        start_idx = current_page * page_size
-        end_idx = start_idx + page_size
-        page_employees = employees_list[start_idx:end_idx]
-        
-        employees_table.rows.clear()
-        for employee in page_employees:
-            guard_rank_text = str(getattr(employee, 'guard_rank', '')) if getattr(employee, 'guard_rank', None) else "Не указано"
-            
-            employees_table.rows.append(
-                ft.DataRow(
-                    cells=[
-                        ft.DataCell(ft.Text(employee.full_name, color=ft.Colors.BLUE), on_tap=lambda e, emp=employee: show_detail_dialog(emp)),
-                        ft.DataCell(ft.Text(guard_rank_text)),
-                    ]
-                )
-            )
-        
-        # Обновляем кнопки пагинации
-        total_pages = (len(employees_list) + page_size - 1) // page_size
-        prev_btn.disabled = current_page == 0
-        next_btn.disabled = current_page >= total_pages - 1
-        page_info.value = f"Страница {current_page + 1} из {max(1, total_pages)}"
-    def on_sort(col):
-        nonlocal sort_column, sort_reverse
-        if sort_column == col:
-            sort_reverse = not sort_reverse
-        else:
-            sort_column = col
-            sort_reverse = False
-        refresh_table()
-        if page:
-            page.update()
-
-    # Диалог редактирования
-    edit_dialog = ft.AlertDialog(modal=True)
-    edit_name = ft.TextField(label="ФИО", width=300)
-    edit_birth = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=180, on_change=format_date_input, max_length=10)
-    def format_edit_certificate_input(e):
-        value = e.control.value.upper().replace("№", "").replace(" ", "")
-        if len(value) > 0 and value[0].isalpha():
-            letter = value[0]
-            numbers = ''.join(filter(str.isdigit, value[1:]))[:6]
-            if numbers:
-                e.control.value = f"{letter}№ {numbers}"
-            else:
-                e.control.value = f"{letter}№ "
-        elif len(value) > 0 and not value[0].isalpha():
-            e.control.value = ""
-        page.update()
+        return query
     
-    edit_certificate = ft.TextField(label="Номер удостоверения (буква№ 000000)", width=200, max_length=9, on_change=format_edit_certificate_input)
-    edit_guard_license = ft.TextField(label="Дата выдачи удостоверения (дд.мм.гггг)", width=250, on_change=format_date_input, max_length=10)
-    edit_guard_rank = ft.Dropdown(label="Разряд охранника", width=180, options=[ft.dropdown.Option(str(i)) for i in range(3, 7)])
-    edit_medical_exam = ft.TextField(label="Дата прохождения медкомиссии (дд.мм.гггг)", width=250, on_change=format_date_input, max_length=10)
-    edit_periodic_check = ft.TextField(label="Дата прохождения периодической проверки (дд.мм.гггг)", width=250, on_change=format_date_input, max_length=10)
-    edit_payment_method = ft.Dropdown(label="Способ выдачи зарплаты", width=250, options=[ft.dropdown.Option("на карту"), ft.dropdown.Option("на руки")])
-
-    # Диалог увольнения
-    termination_dialog = ft.AlertDialog(
-        modal=True,
-        title=ft.Text("Уволить сотрудника"),
-        content=ft.Column([], height=200),
-        actions=[
-            ft.TextButton("Уволить", on_click=None),
-            ft.TextButton("Отмена", on_click=lambda e: close_termination_dialog()),
-        ]
-    )
+    def _apply_name_filter(self, query):
+        return query.where(GuardEmployee.full_name.contains(self.search_value))
     
-    termination_date_field = ft.TextField(label="Дата увольнения (дд.мм.гггг)", width=200, on_change=format_date_input, max_length=10)
-    termination_reason_field = ft.TextField(label="Причина увольнения (необязательно)", width=300, multiline=True)
-
-    def show_termination_dialog(employee_to_terminate):
-        termination_date_field.value = ""
-        termination_reason_field.value = ""
-        termination_dialog.content.controls = [
-            ft.Text(f"Увольнение сотрудника: {employee_to_terminate.full_name}", weight="bold"),
-            termination_date_field,
-            termination_reason_field
-        ]
-        termination_dialog.actions[0].on_click = lambda e: terminate_employee(employee_to_terminate)
-        termination_dialog.open = True
-        if page and termination_dialog not in page.overlay:
-            page.overlay.append(termination_dialog)
-        if page:
-            page.update()
-
-    def close_termination_dialog():
-        termination_dialog.open = False
-        if page:
-            page.update()
-
-    def terminate_employee(employee):
-        try:
-            if db.is_closed():
-                db.connect()
-            
-            termination_date_value = termination_date_field.value.strip()
-            termination_reason_value = termination_reason_field.value.strip()
-            
-            if not termination_date_value:
-                termination_dialog.content.controls.append(
-                    ft.Text("Дата увольнения обязательна!", color=ft.Colors.RED)
-                )
-                page.update()
-                return
-            
-            termination_date = datetime.strptime(termination_date_value, "%d.%m.%Y").date()
-            
-            employee.termination_date = termination_date
-            employee.termination_reason = termination_reason_value or None
-            employee.save()
-            
-            close_termination_dialog()
-            close_edit_dialog(None)
-            refresh_table()
-            if page:
-                page.update()
-        except ValueError:
-            termination_dialog.content.controls.append(
-                ft.Text("Неверный формат даты!", color=ft.Colors.RED)
-            )
-            page.update()
-        except Exception as ex:
-            print(f"Ошибка увольнения: {ex}")
-        finally:
-            if not db.is_closed():
-                db.close()
-
-    def show_edit_dialog(employee):
-        edit_name.value = employee.full_name
-        edit_birth.value = format_date(employee.birth_date)
-        edit_certificate.value = getattr(employee, 'certificate_number', '') or ''
-        edit_guard_license.value = format_date(employee.guard_license_date) if hasattr(employee, 'guard_license_date') else ""
-        edit_guard_rank.value = str(employee.guard_rank) if hasattr(employee, 'guard_rank') and employee.guard_rank else None
-        edit_medical_exam.value = format_date(employee.medical_exam_date) if hasattr(employee, 'medical_exam_date') else ""
-        edit_periodic_check.value = format_date(employee.periodic_check_date) if hasattr(employee, 'periodic_check_date') else ""
-        edit_payment_method.value = getattr(employee, 'payment_method', 'на карту')
-        edit_dialog.title = ft.Text(f"Редактировать сотрудника")
-        edit_dialog.content = ft.Column([
-            edit_name,
-            edit_birth,
-            edit_certificate,
-            edit_guard_license,
-            edit_medical_exam,
-            edit_periodic_check,
-            edit_guard_rank,
-            edit_payment_method,
-        ], spacing=10)
-        edit_dialog.actions = [
-            ft.TextButton("Сохранить", on_click=lambda e, emp=employee: save_edit_employee(emp)),
-            ft.TextButton("Уволить", on_click=lambda e, emp=employee: show_termination_dialog(emp), style=ft.ButtonStyle(color=ft.Colors.RED)),
-            ft.TextButton("Отмена", on_click=close_edit_dialog),
-        ]
-        edit_dialog.open = True
-        if page and edit_dialog not in page.overlay:
-            page.overlay.append(edit_dialog)
-        if page:
-            page.update()
-            
-    def close_edit_dialog(e):
-        edit_dialog.open = False
-        if page:
-            page.update()
-
-    def save_edit_employee(employee):
-        from datetime import datetime
-        try:
-            if db.is_closed():
-                db.connect()
-            
-            full_name = edit_name.value.strip()
-            birth_value = edit_birth.value.strip()
-            certificate_value = edit_certificate.value.strip()
-            guard_license_value = edit_guard_license.value.strip()
-            guard_rank_value = edit_guard_rank.value
-            medical_exam_value = edit_medical_exam.value.strip()
-            periodic_check_value = edit_periodic_check.value.strip()
-            payment_method_value = edit_payment_method.value
-            
-            if not full_name:
-                raise ValueError("ФИО обязательно!")
-            if not birth_value or birth_value == "Не указано":
-                raise ValueError("Дата рождения обязательна!")
-            if certificate_value and not (len(certificate_value) == 9 and certificate_value[0].isalpha() and certificate_value[1:3] == '№ ' and certificate_value[3:].isdigit()):
-                raise ValueError("Номер удостоверения должен быть в формате: буква№ 000000!")
-            
-            employee.full_name = full_name
-            employee.birth_date = datetime.strptime(birth_value, "%d.%m.%Y").date()
-            employee.certificate_number = certificate_value or None
-            employee.guard_license_date = datetime.strptime(guard_license_value, "%d.%m.%Y").date() if guard_license_value and guard_license_value != "Не указано" else None
-            employee.guard_rank = int(guard_rank_value) if guard_rank_value else None
-            employee.medical_exam_date = datetime.strptime(medical_exam_value, "%d.%m.%Y").date() if medical_exam_value and medical_exam_value != "Не указано" else None
-            employee.periodic_check_date = datetime.strptime(periodic_check_value, "%d.%m.%Y").date() if periodic_check_value and periodic_check_value != "Не указано" else None
-            employee.payment_method = payment_method_value or 'на карту'
-            employee.save()
-            close_edit_dialog(None)
-            refresh_table()
-            if page:
-                page.update()
-        except ValueError as ex:
-            edit_dialog.content = ft.Column([
-                edit_name,
-                edit_birth,
-                edit_certificate,
-                edit_guard_license,
-                edit_medical_exam,
-                edit_periodic_check,
-                edit_guard_rank,
-                edit_payment_method,
-                ft.Text(f"Ошибка: {str(ex)}", color=ft.Colors.RED)
-            ], spacing=10)
-        except Exception as ex:
-            print(f"Ошибка редактирования: {ex}")
-        finally:
-            if not db.is_closed():
-                db.close()
-            if page:
-                page.update()
-
-    def on_search_change(e):
-        nonlocal search_value, current_page
-        search_value = e.control.value.strip()
-        current_page = 0  # Сброс на первую страницу при поиске
-        refresh_table()
-        if page:
-            page.update()
+    def _apply_company_filter(self, query, companies):
+        return query.where(GuardEmployee.company.in_(companies))
     
-    def on_rank_change(e):
-        nonlocal selected_rank, current_page
-        selected_rank = e.control.value
-        current_page = 0  # Сброс на первую страницу при фильтрации
-        refresh_table()
-        if page:
-            page.update()
+    def _get_order_field(self):
+        return GuardEmployee.full_name
     
-    def prev_page(e):
-        nonlocal current_page
-        if current_page > 0:
-            current_page -= 1
-            refresh_table()
-            if page:
-                page.update()
+    def _create_table_row(self, employee):
+        guard_rank_text = str(getattr(employee, 'guard_rank', '')) if getattr(employee, 'guard_rank', None) else "Не указано"
+        return ft.DataRow(cells=[
+            ft.DataCell(ft.Text(employee.full_name), on_tap=lambda e, emp=employee: self.show_detail_dialog(emp)),
+            ft.DataCell(ft.Text(guard_rank_text)),
+        ])
     
-    def next_page(e):
-        nonlocal current_page
-        current_page += 1
-        refresh_table()
-        if page:
-            page.update()
+    def _get_detail_title(self):
+        return "Информация о сотруднике"
     
-    # Элементы пагинации
-    prev_btn = ft.IconButton(icon=ft.Icons.ARROW_BACK, on_click=prev_page)
-    next_btn = ft.IconButton(icon=ft.Icons.ARROW_FORWARD, on_click=next_page)
-    page_info = ft.Text("Страница 1 из 1")
-    
-    # Диалог детальной информации
-    detail_dialog = ft.AlertDialog(modal=True)
-    
-    def show_detail_dialog(employee):
-        detail_dialog.title = ft.Text(f"Информация о сотруднике: {employee.full_name}")
-        detail_dialog.content = ft.Column([
-            ft.Text(f"Дата рождения: {format_date(employee.birth_date)}", size=16),
+    def _get_detail_content(self, employee):
+        return [
+            ft.Text(f"Дата рождения: {self.format_date(employee.birth_date)}", size=16),
             ft.Text(f"Номер удостоверения: {getattr(employee, 'certificate_number', '') or 'Не указано'}", size=16),
-            ft.Text(f"Дата выдачи УЧО: {format_date(getattr(employee, 'guard_license_date', None))}", size=16),
+            ft.Text(f"Дата выдачи УЧО: {self.format_date(getattr(employee, 'guard_license_date', None))}", size=16),
             ft.Text(f"Разряд охранника: {str(getattr(employee, 'guard_rank', '')) if getattr(employee, 'guard_rank', None) else 'Не указано'}", size=16),
-            ft.Text(f"Медкомиссия: {format_date(getattr(employee, 'medical_exam_date', None))}", size=16),
-            ft.Text(f"Периодическая проверка: {format_date(getattr(employee, 'periodic_check_date', None))}", size=16),
+            ft.Text(f"Медкомиссия: {self.format_date(getattr(employee, 'medical_exam_date', None))}", size=16),
+            ft.Text(f"Периодическая проверка: {self.format_date(getattr(employee, 'periodic_check_date', None))}", size=16),
             ft.Text(f"Способ выдачи зарплаты: {getattr(employee, 'payment_method', 'на карту')}", size=16),
-        ], spacing=10, height=300)
-        detail_dialog.actions = [
-            ft.TextButton("Редактировать", on_click=lambda e, emp=employee: (close_detail_dialog(), show_edit_dialog(emp))),
-            ft.TextButton("Закрыть", on_click=lambda e: close_detail_dialog()),
+            ft.Text(f"Компания: {getattr(employee, 'company', 'Легион')}", size=16),
         ]
-        detail_dialog.open = True
-        if page and detail_dialog not in page.overlay:
-            page.overlay.append(detail_dialog)
-        if page:
-            page.update()
     
-    def close_detail_dialog():
-        detail_dialog.open = False
-        if page:
-            page.update()
+    def _get_add_title(self):
+        return "Добавить сотрудника"
     
-    # Создаем DataTable
-    employees_table = ft.DataTable(
-        columns=[
-            ft.DataColumn(ft.Text("ФИО", width=400), on_sort=lambda _: on_sort("full_name")),
-            ft.DataColumn(ft.Text("Разряд", width=100)),
-        ],
-        rows=[],
-        horizontal_lines=ft.border.BorderSide(1, ft.Colors.OUTLINE),
-        vertical_lines=ft.border.BorderSide(1, ft.Colors.OUTLINE),
-        heading_row_height=70,
-        data_row_min_height=50,
-        data_row_max_height=50,
-        column_spacing=10,
-        width=600,
-        height=707
-    )
-    refresh_table()
+    def _get_form_fields(self):
+        return [self.name_field, self.birth_field, self.certificate_field, self.guard_license_field, self.medical_exam_field, self.periodic_check_field, self.guard_rank_field, self.payment_method_field, self.company_field]
     
-    return ft.Column(
-        [
-            ft.Row(
-                [
-                    ft.Text("Сотрудники охраны", size=24, weight="bold"),
-                    ft.ElevatedButton(
-                        "Добавить сотрудника",
-                        icon=ft.Icons.ADD,
-                        on_click=show_add_dialog,
-                    ),
+    def _get_edit_fields(self):
+        return [self.edit_name_field, self.edit_birth_field, self.edit_certificate_field, self.edit_guard_license_field, self.edit_medical_exam_field, self.edit_periodic_check_field, self.edit_guard_rank_field, self.edit_payment_method_field, self.edit_company_field]
+    
+    def _populate_edit_fields(self, employee):
+        self.edit_name_field.value = employee.full_name
+        self.edit_birth_field.value = self.format_date(employee.birth_date)
+        self.edit_certificate_field.value = getattr(employee, 'certificate_number', '') or ''
+        self.edit_guard_license_field.value = self.format_date(getattr(employee, 'guard_license_date', None)) if hasattr(employee, 'guard_license_date') else ""
+        self.edit_guard_rank_field.value = str(employee.guard_rank) if hasattr(employee, 'guard_rank') and employee.guard_rank else None
+        self.edit_medical_exam_field.value = self.format_date(getattr(employee, 'medical_exam_date', None)) if hasattr(employee, 'medical_exam_date') else ""
+        self.edit_periodic_check_field.value = self.format_date(getattr(employee, 'periodic_check_date', None)) if hasattr(employee, 'periodic_check_date') else ""
+        self.edit_payment_method_field.value = getattr(employee, 'payment_method', 'на карту')
+        self.edit_company_field.value = getattr(employee, 'company', 'Легион')
+    
+    def _save_operation(self):
+        full_name = self.name_field.value.strip()
+        birth_value = self.birth_field.value.strip()
+        certificate_value = self.certificate_field.value.strip()
+        guard_license_value = self.guard_license_field.value.strip()
+        guard_rank_value = self.guard_rank_field.value
+        medical_exam_value = self.medical_exam_field.value.strip()
+        periodic_check_value = self.periodic_check_field.value.strip()
+        payment_method_value = self.payment_method_field.value
+        
+        if not full_name:
+            raise ValueError("ФИО обязательно!")
+        if not birth_value:
+            raise ValueError("Дата рождения обязательна!")
+        
+        birth_date = datetime.strptime(birth_value, "%d.%m.%Y").date()
+        guard_license_date = datetime.strptime(guard_license_value, "%d.%m.%Y").date() if guard_license_value else None
+        guard_rank = int(guard_rank_value) if guard_rank_value else None
+        medical_exam_date = datetime.strptime(medical_exam_value, "%d.%m.%Y").date() if medical_exam_value else None
+        periodic_check_date = datetime.strptime(periodic_check_value, "%d.%m.%Y").date() if periodic_check_value else None
+        
+        GuardEmployee.create(
+            full_name=full_name,
+            birth_date=birth_date,
+            certificate_number=certificate_value or None,
+            guard_license_date=guard_license_date,
+            guard_rank=guard_rank,
+            medical_exam_date=medical_exam_date,
+            periodic_check_date=periodic_check_date,
+            payment_method=payment_method_value or "на карту",
+            company=self.company_field.value or "Легион"
+        )
+        return True
+    
+    def _save_edit_operation(self):
+        full_name = self.edit_name_field.value.strip()
+        birth_value = self.edit_birth_field.value.strip()
+        
+        if not full_name:
+            raise ValueError("ФИО обязательно!")
+        if not birth_value or birth_value == "Не указано":
+            raise ValueError("Дата рождения обязательна!")
+        
+        self.current_employee.full_name = full_name
+        self.current_employee.birth_date = datetime.strptime(birth_value, "%d.%m.%Y").date()
+        self.current_employee.certificate_number = self.edit_certificate_field.value.strip() or None
+        
+        guard_license_value = self.edit_guard_license_field.value.strip()
+        self.current_employee.guard_license_date = datetime.strptime(guard_license_value, "%d.%m.%Y").date() if guard_license_value and guard_license_value != "Не указано" else None
+        
+        self.current_employee.guard_rank = int(self.edit_guard_rank_field.value) if self.edit_guard_rank_field.value else None
+        
+        medical_exam_value = self.edit_medical_exam_field.value.strip()
+        self.current_employee.medical_exam_date = datetime.strptime(medical_exam_value, "%d.%m.%Y").date() if medical_exam_value and medical_exam_value != "Не указано" else None
+        
+        periodic_check_value = self.edit_periodic_check_field.value.strip()
+        self.current_employee.periodic_check_date = datetime.strptime(periodic_check_value, "%d.%m.%Y").date() if periodic_check_value and periodic_check_value != "Не указано" else None
+        
+        self.current_employee.payment_method = self.edit_payment_method_field.value or 'на карту'
+        self.current_employee.company = self.edit_company_field.value or 'Легион'
+        self.current_employee.save()
+        return True
+    
+    def _get_success_message(self):
+        return "Сотрудник добавлен!"
+    
+    def _get_page_title(self):
+        return "Сотрудники охраны"
+    
+    def _get_add_button_text(self):
+        return "Добавить сотрудника"
+    
+    def _get_employee_type(self):
+        return "сотрудника"
+    
+    def on_rank_change(self, e):
+        """Обработчик изменения фильтра по разряду"""
+        self.selected_rank = e.control.value
+        self.current_page = 0
+        self.refresh_table()
+        if self.page:
+            self.page.update()
+    
+    def _format_certificate_input(self, e):
+        """Форматирует ввод номера удостоверения"""
+        value = e.control.value.upper().replace("№", "").replace(" ", "")
+        if len(value) > 0 and value[0].isalpha():
+            letter = value[0]
+            numbers = ''.join(filter(str.isdigit, value[1:]))[:6]
+            if numbers:
+                e.control.value = f"{letter}№ {numbers}"
+            else:
+                e.control.value = f"{letter}№ "
+        elif len(value) > 0 and not value[0].isalpha():
+            e.control.value = ""
+        self.page.update()
+    
+    def _get_search_row(self):
+        """Переопределяем строку поиска для добавления фильтра по разряду"""
+        return ft.Row([
+            ft.TextField(label="Поиск по ФИО", width=300, on_change=self.on_search_change, autofocus=False, dense=True),
+            ft.Dropdown(
+                label="Разряд",
+                width=200,
+                value="Все разряды",
+                options=[
+                    ft.dropdown.Option("Все разряды"),
+                    ft.dropdown.Option("3"),
+                    ft.dropdown.Option("4"),
+                    ft.dropdown.Option("5"),
+                    ft.dropdown.Option("6"),
                 ],
-                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                on_change=self.on_rank_change,
+                dense=True,
             ),
-            ft.Divider(),
-            ft.Row([
-                ft.TextField(
-                    label="Поиск по ФИО",
-                    width=300,
-                    on_change=on_search_change,
-                    autofocus=False,
-                    dense=True,
-                ),
-                ft.Dropdown(
-                    label="Разряд",
-                    width=150,
-                    value="Все разряды",
-                    options=[
-                        ft.dropdown.Option("Все разряды"),
-                        ft.dropdown.Option("3"),
-                        ft.dropdown.Option("4"),
-                        ft.dropdown.Option("5"),
-                        ft.dropdown.Option("6"),
-                    ],
-                    on_change=on_rank_change,
-                    dense=True,
-                ),
-            ], alignment=ft.MainAxisAlignment.START, spacing=20),
-            ft.Container(
-                content=ft.Column([
-                    employees_table
-                ], scroll=ft.ScrollMode.AUTO),
-                border=ft.border.all(1, ft.Colors.OUTLINE),
-                border_radius=10,
-                padding=10,
-                expand=True,
-            ),
-            ft.Row([
-                prev_btn,
-                page_info,
-                next_btn,
-            ], alignment=ft.MainAxisAlignment.CENTER),
-        ],
-        spacing=10,
-        expand=True,
-    )
+        ], alignment=ft.MainAxisAlignment.START, spacing=20)
+
+# Функция-обертка для совместимости
+def employees_page(page: ft.Page = None) -> ft.Column:
+    return EmployeesPage(page).render()

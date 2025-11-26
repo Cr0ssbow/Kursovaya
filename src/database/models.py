@@ -48,6 +48,7 @@ class GuardEmployee(BaseModel):
     hours_worked = IntegerField(verbose_name="Количество часов", default=0)
     salary = DecimalField(max_digits=10, decimal_places=2, verbose_name="Зарплата", default=0)
     payment_method = CharField(max_length=20, default="на карту", verbose_name="Способ выдачи зарплаты")
+    company = CharField(max_length=20, default="Легион", verbose_name="Компания")
     
     class Meta:
         table_name = 'guard_employees'
@@ -86,6 +87,7 @@ class ChiefEmployee(BaseModel):
     termination_reason = TextField(null=True, verbose_name="Причина увольнения")
     salary = DecimalField(max_digits=10, decimal_places=2, verbose_name="Зарплата", default=0)
     payment_method = CharField(max_length=20, default="на карту", verbose_name="Способ выдачи зарплаты")
+    company = CharField(max_length=20, default="Легион", verbose_name="Компания")
     
     class Meta:
         table_name = 'chief_employees'
@@ -106,6 +108,7 @@ class OfficeEmployee(BaseModel):
     termination_reason = TextField(null=True, verbose_name="Причина увольнения")
     salary = DecimalField(max_digits=10, decimal_places=2, verbose_name="Зарплата", default=0)
     payment_method = CharField(max_length=20, default="на карту", verbose_name="Способ выдачи зарплаты")
+    company = CharField(max_length=20, default="Легион", verbose_name="Компания")
     
     class Meta:
         table_name = 'office_employees'
@@ -150,6 +153,23 @@ def init_database():
     try:
         db.connect()
         db.create_tables([GuardEmployee, ChiefEmployee, OfficeEmployee, Settings, Object, Assignment], safe=True)
+        
+        # Миграция: добавляем столбец company если его нет
+        try:
+            db.execute_sql("ALTER TABLE guard_employees ADD COLUMN company VARCHAR(20) DEFAULT 'Легион'")
+        except:
+            pass  # Столбец уже существует
+        
+        try:
+            db.execute_sql("ALTER TABLE chief_employees ADD COLUMN company VARCHAR(20) DEFAULT 'Легион'")
+        except:
+            pass
+        
+        try:
+            db.execute_sql("ALTER TABLE office_employees ADD COLUMN company VARCHAR(20) DEFAULT 'Легион'")
+        except:
+            pass
+            
     except Exception as e:
         print(f"Ошибка подключения к PostgreSQL: {e}")
         print("Убедитесь, что PostgreSQL запущен и настройки подключения корректны")
