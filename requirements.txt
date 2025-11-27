@@ -1,5 +1,4 @@
 flet
 peewee
 psycopg2-binary
-pandas
-openpyxl
+python-dotenv

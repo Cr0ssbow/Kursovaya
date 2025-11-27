@@ -2,9 +2,18 @@ import datetime
 import flet as ft
 from database.models import Employee, db
 from datetime import date, timedelta
+from views.settings import load_birthday_display_from_db
 
 def home_page(page: ft.Page = None) -> ft.Column:
-    def get_expiring_licenses():
+    # Поле поиска
+    search_field = ft.TextField(
+        label="Поиск сотрудника",
+        hint_text="Введите ФИО для поиска",
+        width=300,
+        on_change=lambda e: update_containers(e.control.value)
+    )
+    
+    def get_expiring_licenses(search_query=""):
         """Получает список сотрудников с истекающими УЧО (в течение 30 дней)"""
         try:
             if db.is_closed():
@@ -16,6 +25,9 @@ def home_page(page: ft.Page = None) -> ft.Column:
             min_days = 999
             for employee in Employee.select():
                 if hasattr(employee, 'guard_license_date') and employee.guard_license_date:
+                    # Фильтрация по поисковому запросу
+                    if search_query and search_query.lower() not in employee.full_name.lower():
+                        continue
                     # УЧО действует 5 лет
                     expiry_date = employee.guard_license_date.replace(year=employee.guard_license_date.year + 5)
                     days_left = (expiry_date - today).days
@@ -31,7 +43,7 @@ def home_page(page: ft.Page = None) -> ft.Column:
             if not db.is_closed():
                 db.close()
     
-    def get_expiring_medical():
+    def get_expiring_medical(search_query=""):
         """Получает список сотрудников с истекающими медкомиссиями (в течение 30 дней)"""
         try:
             if db.is_closed():
@@ -43,6 +55,9 @@ def home_page(page: ft.Page = None) -> ft.Column:
             min_days = 999
             for employee in Employee.select():
                 if hasattr(employee, 'medical_exam_date') and employee.medical_exam_date:
+                    # Фильтрация по поисковому запросу
+                    if search_query and search_query.lower() not in employee.full_name.lower():
+                        continue
                     # Медкомиссия действует 1 год
                     expiry_date = employee.medical_exam_date.replace(year=employee.medical_exam_date.year + 1)
                     days_left = (expiry_date - today).days
@@ -58,7 +73,7 @@ def home_page(page: ft.Page = None) -> ft.Column:
             if not db.is_closed():
                 db.close()
     
-    def get_expiring_periodic_checks():
+    def get_expiring_periodic_checks(search_query=""):
         """Получает список сотрудников с истекающими периодическими проверками (в течение 30 дней)"""
         try:
             if db.is_closed():
@@ -70,6 +85,9 @@ def home_page(page: ft.Page = None) -> ft.Column:
             min_days = 999
             for employee in Employee.select():
                 if hasattr(employee, 'periodic_check_date') and employee.periodic_check_date:
+                    # Фильтрация по поисковому запросу
+                    if search_query and search_query.lower() not in employee.full_name.lower():
+                        continue
                     # Периодическая проверка действует 1 год
                     expiry_date = employee.periodic_check_date.replace(year=employee.periodic_check_date.year + 1)
                     days_left = (expiry_date - today).days
@@ -85,7 +103,7 @@ def home_page(page: ft.Page = None) -> ft.Column:
             if not db.is_closed():
                 db.close()
     
-    def get_upcoming_birthdays():
+    def get_upcoming_birthdays(search_query=""):
         """Получает список сотрудников с днями рождения в ближайшие 7 дней"""
         try:
             if db.is_closed():
@@ -95,6 +113,9 @@ def home_page(page: ft.Page = None) -> ft.Column:
             upcoming = []
             
             for employee in Employee.select():
+                # Фильтрация по поисковому запросу
+                if search_query and search_query.lower() not in employee.full_name.lower():
+                    continue
                 # Создаем дату дня рождения в текущем году
                 birthday_this_year = employee.birth_date.replace(year=today.year)
                 
@@ -157,6 +178,38 @@ def home_page(page: ft.Page = None) -> ft.Column:
     expiring_periodic_checks, periodic_min_days = get_expiring_periodic_checks()
     upcoming_birthdays = get_upcoming_birthdays()
     birthday_min_days = min([days for _, _, days in upcoming_birthdays], default=999)
+    
+    # Контейнеры для обновления
+    containers_row = ft.Row([], alignment=ft.MainAxisAlignment.SPACE_AROUND, spacing=15)
+    
+    def update_containers(search_query):
+        """Обновляет контейнеры с учетом поискового запроса"""
+        nonlocal expiring_licenses, license_min_days, expiring_medical, medical_min_days
+        nonlocal expiring_periodic_checks, periodic_min_days, upcoming_birthdays, birthday_min_days
+        
+        # Получаем отфильтрованные данные
+        expiring_licenses, license_min_days = get_expiring_licenses(search_query)
+        expiring_medical, medical_min_days = get_expiring_medical(search_query)
+        expiring_periodic_checks, periodic_min_days = get_expiring_periodic_checks(search_query)
+        upcoming_birthdays = get_upcoming_birthdays(search_query)
+        birthday_min_days = min([days for _, _, days in upcoming_birthdays], default=999)
+        
+        # Обновляем контейнеры
+        containers_row.controls.clear()
+        containers = [
+            create_license_container(),
+            create_medical_container(),
+            create_periodic_container()
+        ]
+        
+        # Проверяем настройку отображения дней рождения
+        if load_birthday_display_from_db():
+            containers.append(create_birthday_container())
+        
+        containers_row.controls.extend(containers)
+        
+        if page:
+            page.update()
     
     # Диалог для деталей
     details_dialog = ft.AlertDialog(
@@ -278,19 +331,19 @@ def home_page(page: ft.Page = None) -> ft.Column:
         
         page.open(details_dialog)
     
-    # Контейнер УЧО
-    license_container = ft.Container(
-        content=ft.Column([
-            ft.Text("УЧО", size=18, weight="bold", color=ft.Colors.WHITE),
-            ft.Text(f"Истекает в ближайшие 90 дней: {len(expiring_licenses)}", color=ft.Colors.WHITE)
-        ], alignment=ft.MainAxisAlignment.CENTER),
-        bgcolor=get_license_color(license_min_days),
-        padding=15,
-        border_radius=10,
-        width=250,
-        height=150,
-        on_click=show_license_details
-    )
+    def create_license_container():
+        return ft.Container(
+            content=ft.Column([
+                ft.Text("УЧО", size=18, weight="bold", color=ft.Colors.WHITE),
+                ft.Text(f"Истекает в ближайшие 90 дней: {len(expiring_licenses)}", color=ft.Colors.WHITE)
+            ], alignment=ft.MainAxisAlignment.CENTER),
+            bgcolor=get_license_color(license_min_days),
+            padding=15,
+            border_radius=10,
+            width=250,
+            height=150,
+            on_click=show_license_details
+        )
     
     def show_medical_details(e):
         if not page:
@@ -400,19 +453,19 @@ def home_page(page: ft.Page = None) -> ft.Column:
         
         page.open(details_dialog)
     
-    # Контейнер медкомиссий
-    medical_container = ft.Container(
-        content=ft.Column([
-            ft.Text("Медкомиссии", size=18, weight="bold", color=ft.Colors.WHITE),
-            ft.Text(f"Истекает в ближайшие 60 дней: {len(expiring_medical)}", color=ft.Colors.WHITE)
-        ], alignment=ft.MainAxisAlignment.CENTER),
-        bgcolor=get_medical_color(medical_min_days),
-        padding=15,
-        border_radius=10,
-        width=250,
-        height=150,
-        on_click=show_medical_details
-    )
+    def create_medical_container():
+        return ft.Container(
+            content=ft.Column([
+                ft.Text("Медкомиссии", size=18, weight="bold", color=ft.Colors.WHITE),
+                ft.Text(f"Истекает в ближайшие 60 дней: {len(expiring_medical)}", color=ft.Colors.WHITE)
+            ], alignment=ft.MainAxisAlignment.CENTER),
+            bgcolor=get_medical_color(medical_min_days),
+            padding=15,
+            border_radius=10,
+            width=250,
+            height=150,
+            on_click=show_medical_details
+        )
     
     def show_birthday_details(e):
         if not page:
@@ -440,19 +493,19 @@ def home_page(page: ft.Page = None) -> ft.Column:
         
         page.open(details_dialog)
     
-    # Контейнер дней рождения
-    birthday_container = ft.Container(
-        content=ft.Column([
-            ft.Text("Дни рождения", size=18, weight="bold", color=ft.Colors.WHITE),
-            ft.Text(f"В ближайшие 7 дней: {len(upcoming_birthdays)}", color=ft.Colors.WHITE)
-        ], alignment=ft.MainAxisAlignment.CENTER),
-        bgcolor=get_container_color(birthday_min_days),
-        padding=15,
-        border_radius=10,
-        width=250,
-        height=150,
-        on_click=show_birthday_details
-    )
+    def create_birthday_container():
+        return ft.Container(
+            content=ft.Column([
+                ft.Text("Дни рождения", size=18, weight="bold", color=ft.Colors.WHITE),
+                ft.Text(f"В ближайшие 7 дней: {len(upcoming_birthdays)}", color=ft.Colors.WHITE)
+            ], alignment=ft.MainAxisAlignment.CENTER),
+            bgcolor=get_container_color(birthday_min_days),
+            padding=15,
+            border_radius=10,
+            width=250,
+            height=150,
+            on_click=show_birthday_details
+        )
     
     def show_periodic_details(e):
         if not page:
@@ -562,34 +615,50 @@ def home_page(page: ft.Page = None) -> ft.Column:
         
         page.open(details_dialog)
     
-    # Контейнер периодических проверок
-    periodic_container = ft.Container(
-        content=ft.Column([
-            ft.Text("Периодические проверки", size=18, weight="bold", color=ft.Colors.WHITE),
-            ft.Text(f"Истекает в ближайшие 30 дней: {len(expiring_periodic_checks)}", color=ft.Colors.WHITE)
-        ], alignment=ft.MainAxisAlignment.CENTER),
-        bgcolor=get_periodic_color(periodic_min_days),
-        padding=15,
-        border_radius=10,
-        width=250,
-        height=150,
-        on_click=show_periodic_details
-    )
+    def create_periodic_container():
+        return ft.Container(
+            content=ft.Column([
+                ft.Text("Периодические проверки", size=18, weight="bold", color=ft.Colors.WHITE),
+                ft.Text(f"Истекает в ближайшие 30 дней: {len(expiring_periodic_checks)}", color=ft.Colors.WHITE)
+            ], alignment=ft.MainAxisAlignment.CENTER),
+            bgcolor=get_periodic_color(periodic_min_days),
+            padding=15,
+            border_radius=10,
+            width=250,
+            height=150,
+            on_click=show_periodic_details
+        )
     
     # Добавляем диалог в overlay
     if page and details_dialog not in page.overlay:
         page.overlay.append(details_dialog)
+    
+    # Инициализируем контейнеры
+    containers = [
+        create_license_container(),
+        create_medical_container(),
+        create_periodic_container()
+    ]
+    
+    # Проверяем настройку отображения дней рождения
+    if load_birthday_display_from_db():
+        containers.append(create_birthday_container())
+    
+    containers_row.controls.extend(containers)
     
     return ft.Column(
         [
             ft.Text("Главная страница", size=24, weight="bold"),
             ft.Divider(),
             ft.Row([
-                license_container,
-                medical_container,
-                periodic_container,
-                birthday_container
-            ], alignment=ft.MainAxisAlignment.SPACE_AROUND, spacing=15),
+                search_field,
+                ft.IconButton(
+                    icon=ft.Icons.CLEAR,
+                    tooltip="Очистить поиск",
+                    on_click=lambda e: (setattr(search_field, 'value', ''), update_containers(''))
+                )
+            ], alignment=ft.MainAxisAlignment.START),
+            containers_row,
         ],
         spacing=20,
         expand=True,

@@ -2,6 +2,7 @@ import flet as ft
 from database.models import GuardEmployee
 from datetime import datetime
 from base.base_employee_page import BaseEmployeePage
+import os
 
 class EmployeesPage(BaseEmployeePage):
     """Страница сотрудников охраны"""
@@ -20,6 +21,7 @@ class EmployeesPage(BaseEmployeePage):
         self.periodic_check_field = ft.TextField(label="Дата прохождения периодической проверки (дд.мм.гггг)", width=250, on_change=self.format_date_input, max_length=10)
         self.guard_rank_field = ft.Dropdown(label="Разряд охранника", width=180, options=[ft.dropdown.Option(str(i)) for i in range(3, 7)])
         self.payment_method_field = ft.Dropdown(label="Способ выдачи зарплаты", width=250, options=[ft.dropdown.Option("на карту"), ft.dropdown.Option("на руки")], value="на карту")
+        self.company_field = ft.Dropdown(label="Компания", width=150, options=[ft.dropdown.Option("Легион"), ft.dropdown.Option("Норд")], value="Легион")
     
     def _create_edit_fields(self):
         """Создает поля редактирования"""
@@ -47,7 +49,7 @@ class EmployeesPage(BaseEmployeePage):
             data_row_min_height=50,
             data_row_max_height=50,
             column_spacing=10,
-            width=600,
+            width=4000,
             height=707
         )
     
@@ -84,16 +86,23 @@ class EmployeesPage(BaseEmployeePage):
         return "Информация о сотруднике"
     
     def _get_detail_content(self, employee):
-        return [
-            ft.Text(f"Дата рождения: {self.format_date(employee.birth_date)}", size=16),
-            ft.Text(f"Номер удостоверения: {getattr(employee, 'certificate_number', '') or 'Не указано'}", size=16),
-            ft.Text(f"Дата выдачи УЧО: {self.format_date(getattr(employee, 'guard_license_date', None))}", size=16),
-            ft.Text(f"Разряд охранника: {str(getattr(employee, 'guard_rank', '')) if getattr(employee, 'guard_rank', None) else 'Не указано'}", size=16),
-            ft.Text(f"Медкомиссия: {self.format_date(getattr(employee, 'medical_exam_date', None))}", size=16),
-            ft.Text(f"Периодическая проверка: {self.format_date(getattr(employee, 'periodic_check_date', None))}", size=16),
-            ft.Text(f"Способ выдачи зарплаты: {getattr(employee, 'payment_method', 'на карту')}", size=16),
-            ft.Text(f"Компания: {getattr(employee, 'company', 'Легион')}", size=16),
+        content = [
+            ft.Row([
+                ft.Column([
+                    self.get_photo_widget(employee.full_name),
+                    ft.Text(f"Дата рождения: {self.format_date(employee.birth_date)}", size=16),
+                    ft.Text(f"Номер удостоверения: {getattr(employee, 'certificate_number', '') or 'Не указано'}", size=16),
+                    ft.Text(f"Дата выдачи УЧО: {self.format_date(getattr(employee, 'guard_license_date', None))}", size=16),
+                    ft.Text(f"Разряд охранника: {str(getattr(employee, 'guard_rank', '')) if getattr(employee, 'guard_rank', None) else 'Не указано'}", size=16),
+                    ft.Text(f"Медкомиссия: {self.format_date(getattr(employee, 'medical_exam_date', None))}", size=16),
+                    ft.Text(f"Периодическая проверка: {self.format_date(getattr(employee, 'periodic_check_date', None))}", size=16),
+                    ft.Text(f"Способ выдачи зарплаты: {getattr(employee, 'payment_method', 'на карту')}", size=16),
+                    ft.Text(f"Компания: {getattr(employee, 'company', 'Легион')}", size=16),
+                ]),
+                ft.Container(expand=True)
+            ])
         ]
+        return content
     
     def _get_add_title(self):
         return "Добавить сотрудника"
@@ -136,7 +145,7 @@ class EmployeesPage(BaseEmployeePage):
         medical_exam_date = datetime.strptime(medical_exam_value, "%d.%m.%Y").date() if medical_exam_value else None
         periodic_check_date = datetime.strptime(periodic_check_value, "%d.%m.%Y").date() if periodic_check_value else None
         
-        GuardEmployee.create(
+        employee = GuardEmployee.create(
             full_name=full_name,
             birth_date=birth_date,
             certificate_number=certificate_value or None,
@@ -147,6 +156,8 @@ class EmployeesPage(BaseEmployeePage):
             payment_method=payment_method_value or "на карту",
             company=self.company_field.value or "Легион"
         )
+        
+
         return True
     
     def _save_edit_operation(self):
@@ -175,6 +186,7 @@ class EmployeesPage(BaseEmployeePage):
         
         self.current_employee.payment_method = self.edit_payment_method_field.value or 'на карту'
         self.current_employee.company = self.edit_company_field.value or 'Легион'
+        
         self.current_employee.save()
         return True
     
@@ -231,6 +243,37 @@ class EmployeesPage(BaseEmployeePage):
                 dense=True,
             ),
         ], alignment=ft.MainAxisAlignment.START, spacing=20)
+    
+
+    
+
+    
+
+    
+
+    
+    def _get_detail_actions(self, employee):
+        """Возвращает кнопки действий для диалога"""
+        return [
+            ft.TextButton("Изменить фотографию", on_click=lambda e, emp=employee: self.change_photo(emp)),
+            ft.TextButton("Редактировать", on_click=lambda e, emp=employee: (self.close_detail_dialog(), self.show_edit_dialog(emp))),
+            ft.TextButton("Уволить", on_click=lambda e, emp=employee: (self.close_detail_dialog(), self.show_termination_dialog(emp)), style=ft.ButtonStyle(color=ft.Colors.RED)),
+            ft.TextButton("Закрыть", on_click=lambda e: self.close_detail_dialog())
+        ]
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
 
 # Функция-обертка для совместимости
 def employees_page(page: ft.Page = None) -> ft.Column:

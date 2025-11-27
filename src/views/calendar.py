@@ -1,6 +1,6 @@
 import flet as ft
 import datetime
-from database.models import Assignment, Employee, Object, db
+from database.models import Assignment, Employee, Object, ChiefEmployee, ChiefObjectAssignment, db
 from peewee import *
 from views.settings import load_cell_shape_from_db
 from base.base_page import BasePage
@@ -89,9 +89,12 @@ class CalendarPage(BasePage):
         self.search_results = ft.Column(visible=False)
         self.object_search = ft.TextField(label="Поиск объекта", width=300, on_change=lambda e: self.search_objects(e.control.value))
         self.object_search_results = ft.Column(visible=False)
+        self.chief_display = ft.Text("Начальник: не назначен", size=16)
+        self.selected_chief_id = None
         self.hours_dropdown = ft.Dropdown(label="Количество часов", options=[ft.dropdown.Option("12"), ft.dropdown.Option("24")], value="12", width=200)
         self.hourly_rate_display = ft.Text("Почасовая ставка: не выбрано", size=16)
         self.address_display = ft.Text("Адрес: не выбрано", size=16)
+        self.load_chiefs()
     
     def close_shifts_dialog(self):
         self.shifts_dialog.open = False
@@ -225,6 +228,7 @@ class CalendarPage(BasePage):
                 description_lines = [
                     ft.Text(f"Сотрудник: {assignment.employee.full_name}", weight="bold"),
                     ft.Text(f"Объект: {assignment.object.name}"),
+                    ft.Text(f"Начальник: {assignment.chief.full_name if assignment.chief else 'Не назначен'}"),
                     ft.Text(f"Часы: {assignment.hours}"),
                     ft.Text(f"Ставка: {assignment.hourly_rate} ₽/час")
                 ]
@@ -453,16 +457,40 @@ class CalendarPage(BasePage):
         self.object_search_results.visible = False
         self.hourly_rate_display.value = f"Почасовая ставка: {float(obj.hourly_rate):.2f} ₽"
         self.address_display.value = f"Адрес: {obj.address or 'не указан'}"
+        self.auto_assign_chief(obj)
         self.page.update()
+    
+    def load_chiefs(self):
+        """Загружает список начальников"""
+        pass  # Не нужно, так как начальник назначается автоматически
+    
+    def auto_assign_chief(self, obj):
+        """Автоматически назначает начальника на основе объекта"""
+        def operation():
+            # Получаем первого начальника, закрепленного за этим объектом
+            assignment = ChiefObjectAssignment.select().where(ChiefObjectAssignment.object == obj).first()
+            if assignment and assignment.chief.termination_date is None:
+                return assignment.chief
+            return None
+        
+        chief = self.safe_db_operation(operation)
+        if chief:
+            self.chief_display.value = f"Начальник: {chief.full_name}"
+            self.selected_chief_id = chief.id
+        else:
+            self.chief_display.value = "Начальник: не назначен"
+            self.selected_chief_id = None
     
     def setup_add_shift_form(self):
         self.employee_search.value = ""
         self.object_search.value = ""
+        self.selected_chief_id = None
         self.hours_dropdown.value = "12"
         self.search_results.visible = False
         self.object_search_results.visible = False
         self.hourly_rate_display.value = "Почасовая ставка: не выбрано"
         self.address_display.value = "Адрес: не выбрано"
+        self.chief_display.value = "Начальник: не назначен"
         
         self.add_shift_dialog.content.controls = [
             ft.Text(f"Дата: {self.current_shift_date.strftime('%d.%m.%Y')}", weight="bold"),
@@ -470,6 +498,7 @@ class CalendarPage(BasePage):
             self.search_results,
             self.object_search,
             self.object_search_results,
+            self.chief_display,
             self.hours_dropdown,
             self.address_display,
             self.hourly_rate_display
@@ -483,9 +512,14 @@ class CalendarPage(BasePage):
             employee = Employee.get(Employee.full_name == self.employee_search.value)
             obj = Object.get(Object.name == self.object_search.value)
             
+            chief = None
+            if self.selected_chief_id:
+                chief = ChiefEmployee.get_by_id(self.selected_chief_id)
+            
             Assignment.create(
                 employee=employee,
                 object=obj,
+                chief=chief,
                 date=self.current_shift_date,
                 hours=int(self.hours_dropdown.value),
                 hourly_rate=obj.hourly_rate

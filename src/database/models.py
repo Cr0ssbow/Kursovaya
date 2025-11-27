@@ -19,7 +19,8 @@ db = PostgresqlDatabase(
     user=DB_USER,
     password=DB_PASSWORD,
     host=DB_HOST,
-    port=DB_PORT
+    port=DB_PORT,
+    options='-c client_encoding=utf8'
 )
 
 class BaseModel(Model):
@@ -134,6 +135,7 @@ class Assignment(BaseModel):
     """Модель назначения сотрудника на объект"""
     employee = ForeignKeyField(GuardEmployee, backref='assignments', on_delete='CASCADE') # связь один ко многим employee (1) → (многоо) Assignment
     object = ForeignKeyField(Object, backref='assignments', on_delete='CASCADE') # связь один ко многим Object (1) → (многоо) Assignment
+    chief = ForeignKeyField(ChiefEmployee, backref='supervised_assignments', on_delete='SET NULL', null=True, verbose_name="Начальник охраны")
     date = DateField(verbose_name="Дата назначения")
     hours = IntegerField(verbose_name="Количество часов")
     hourly_rate = DecimalField(max_digits=7, decimal_places=2, verbose_name="Почасовая ставка")
@@ -147,12 +149,47 @@ class Assignment(BaseModel):
     class Meta:
         table_name = 'assignments'
 
+class ChiefObjectAssignment(BaseModel):
+    """Модель назначения начальника на объект"""
+    chief = ForeignKeyField(ChiefEmployee, backref='object_assignments', on_delete='CASCADE')
+    object = ForeignKeyField(Object, backref='chief_assignments', on_delete='CASCADE')
+    assigned_date = DateField(verbose_name="Дата назначения", default=datetime.now)
+    
+    class Meta:
+        table_name = 'chief_object_assignments'
+        indexes = (
+            (('chief', 'object'), True),  # Уникальная связь начальник-объект
+        )
+
+class PersonalCard(BaseModel):
+    """Модель личной карточки"""
+    guard_employee = ForeignKeyField(GuardEmployee, backref='personal_cards', on_delete='CASCADE', null=True)
+    chief_employee = ForeignKeyField(ChiefEmployee, backref='personal_cards', on_delete='CASCADE', null=True)
+    issue_date = DateField(verbose_name="Дата выдачи")
+    photo_path = CharField(max_length=500, null=True, verbose_name="Путь к фотографии карточки")
+    created_at = DateTimeField(default=datetime.now)
+    
+    class Meta:
+        table_name = 'personal_cards'
+
+class EmployeeDocument(BaseModel):
+    """Модель документов сотрудников"""
+    guard_employee = ForeignKeyField(GuardEmployee, backref='documents', on_delete='CASCADE', null=True)
+    chief_employee = ForeignKeyField(ChiefEmployee, backref='documents', on_delete='CASCADE', null=True)
+    document_type = CharField(max_length=50, verbose_name="Тип документа")  # Паспорт, Удостоверение, СНИЛС, Периодички
+    page_number = IntegerField(verbose_name="Номер страницы")
+    file_path = CharField(max_length=500, verbose_name="Путь к файлу")
+    created_at = DateTimeField(default=datetime.now)
+    
+    class Meta:
+        table_name = 'employee_documents'
+
 # Создание таблиц
 def init_database():
     """Инициализация базы данных"""
     try:
         db.connect()
-        db.create_tables([GuardEmployee, ChiefEmployee, OfficeEmployee, Settings, Object, Assignment], safe=True)
+        db.create_tables([GuardEmployee, ChiefEmployee, OfficeEmployee, Settings, Object, Assignment, ChiefObjectAssignment, PersonalCard, EmployeeDocument], safe=True)
         
         # Миграция: добавляем столбец company если его нет
         try:
@@ -169,6 +206,23 @@ def init_database():
             db.execute_sql("ALTER TABLE office_employees ADD COLUMN company VARCHAR(20) DEFAULT 'Легион'")
         except:
             pass
+        
+        # Миграция: добавляем столбец chief_id в assignments
+        try:
+            db.execute_sql("ALTER TABLE assignments ADD COLUMN chief_id INTEGER")
+        except:
+            pass  # Столбец уже существует
+        
+        try:
+            db.execute_sql("ALTER TABLE assignments ADD CONSTRAINT fk_assignments_chief FOREIGN KEY (chief_id) REFERENCES chief_employees(id) ON DELETE SET NULL")
+        except:
+            pass  # Ограничение уже существует
+        
+        # Миграция: добавляем столбец photo_path в personal_cards
+        try:
+            db.execute_sql("ALTER TABLE personal_cards ADD COLUMN photo_path VARCHAR(500)")
+        except:
+            pass  # Столбец уже существует
             
     except Exception as e:
         print(f"Ошибка подключения к PostgreSQL: {e}")

@@ -52,15 +52,21 @@ class OfficeEmployeesPage(BaseEmployeePage):
         ])
     
     def _get_detail_title(self):
-        return "Информация о сотруднике офиса"
+        return "Карточка сотрудника офиса"
     
     def _get_detail_content(self, employee):
         return [
-            ft.Text(f"Дата рождения: {self.format_date(employee.birth_date)}", size=16),
-            ft.Text(f"Должность: {employee.position}", size=16),
-            ft.Text(f"Зарплата: {employee.salary} ₽", size=16),
-            ft.Text(f"Способ выдачи зарплаты: {employee.payment_method}", size=16),
-            ft.Text(f"Компания: {getattr(employee, 'company', 'Легион')}", size=16),
+            ft.Row([
+                ft.Column([
+                    self.get_photo_widget(employee.full_name),
+                    ft.Text(f"Дата рождения: {self.format_date(employee.birth_date)}", size=16),
+                    ft.Text(f"Должность: {employee.position}", size=16),
+                    ft.Text(f"Зарплата: {employee.salary} ₽", size=16),
+                    ft.Text(f"Способ выдачи зарплаты: {employee.payment_method}", size=16),
+                    ft.Text(f"Компания: {getattr(employee, 'company', 'Легион')}", size=16),
+                ]),
+                ft.Container(expand=True)
+            ])
         ]
     
     def _get_add_title(self):
@@ -86,7 +92,7 @@ class OfficeEmployeesPage(BaseEmployeePage):
         birth_date = datetime.strptime(birth_value, "%d.%m.%Y").date()
         salary = float(salary_value) if salary_value else 0
         
-        OfficeEmployee.create(
+        employee = OfficeEmployee.create(
             full_name=full_name,
             birth_date=birth_date,
             position=position_value,
@@ -94,6 +100,8 @@ class OfficeEmployeesPage(BaseEmployeePage):
             payment_method=payment_method_value or "на карту",
             company=self.company_field.value or "Легион"
         )
+        
+
         return True
     
     def _get_success_message(self):
@@ -153,6 +161,44 @@ class OfficeEmployeesPage(BaseEmployeePage):
     
     def _get_employee_type(self):
         return "сотрудника офиса"
+    
+    def show_detail_dialog(self, employee):
+        """Показывает диалог с детальной информацией"""
+        self.detail_dialog.title = ft.Text(f"{self._get_detail_title()}: {employee.full_name}")
+        self.detail_dialog.content = ft.Column(self._get_detail_content(employee), spacing=10, height=500, width=600)
+        self.detail_dialog.actions = [
+            ft.TextButton("Изменить фотографию", on_click=lambda e, emp=employee: self.change_photo(emp)),
+            ft.TextButton("Редактировать", on_click=lambda e, emp=employee: (self.close_detail_dialog(), self.show_edit_dialog(emp))),
+            ft.TextButton("Уволить", on_click=lambda e, emp=employee: (self.close_detail_dialog(), self.show_termination_dialog(emp)), style=ft.ButtonStyle(color=ft.Colors.RED)),
+            ft.TextButton("Закрыть", on_click=lambda e: self.close_detail_dialog())
+        ]
+        self.detail_dialog.open = True
+        if self.page and self.detail_dialog not in self.page.overlay:
+            self.page.overlay.append(self.detail_dialog)
+        if self.page:
+            self.page.update()
+    
+    def change_photo(self, employee):
+        """Изменение фотографии сотрудника"""
+        def on_result(e: ft.FilePickerResultEvent):
+            if e.files:
+                try:
+                    photo_path = self.photo_manager.save_photo(employee.full_name, e.files[0].path)
+                    employee.photo_path = photo_path
+                    employee.save()
+                    self.show_snackbar("Фотография обновлена!")
+                    self.close_detail_dialog()
+                except Exception as ex:
+                    self.show_snackbar(f"Ошибка сохранения фото: {ex}", True)
+        
+        file_picker = ft.FilePicker(on_result=on_result)
+        if self.page and file_picker not in self.page.overlay:
+            self.page.overlay.append(file_picker)
+            self.page.update()
+        file_picker.pick_files(
+            dialog_title="Выберите фотографию или PDF",
+            allowed_extensions=["jpg", "jpeg", "png", "bmp", "pdf"]
+        )
 
 # Функция-обертка для совместимости
 def office_employees_page(page: ft.Page = None) -> ft.Column:

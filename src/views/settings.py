@@ -4,7 +4,11 @@ from peewee import DoesNotExist
 from excel_export import export_assignments_to_excel
 
 def save_theme_to_db(theme: str):
-    Settings.insert(key="theme", value=theme).on_conflict_replace().execute()
+    try:
+        Settings.get(Settings.key == "theme")
+        Settings.update(value=theme).where(Settings.key == "theme").execute()
+    except DoesNotExist:
+        Settings.create(key="theme", value=theme)
 
 def load_theme_from_db() -> str:
     try:
@@ -14,7 +18,11 @@ def load_theme_from_db() -> str:
         return "light"
 
 def save_cell_shape_to_db(shape: str):
-    Settings.insert(key="cell_shape", value=shape).on_conflict_replace().execute()
+    try:
+        Settings.get(Settings.key == "cell_shape")
+        Settings.update(value=shape).where(Settings.key == "cell_shape").execute()
+    except DoesNotExist:
+        Settings.create(key="cell_shape", value=shape)
 
 def load_cell_shape_from_db() -> str:
     try:
@@ -23,12 +31,27 @@ def load_cell_shape_from_db() -> str:
     except DoesNotExist:
         return "square"
 
+def save_birthday_display_to_db(enabled: bool):
+    try:
+        Settings.get(Settings.key == "show_birthdays")
+        Settings.update(value="true" if enabled else "false").where(Settings.key == "show_birthdays").execute()
+    except DoesNotExist:
+        Settings.create(key="show_birthdays", value="true" if enabled else "false")
+
+def load_birthday_display_from_db() -> bool:
+    try:
+        setting = Settings.get(Settings.key == "show_birthdays")
+        return setting.value == "true"
+    except DoesNotExist:
+        return True  # По умолчанию включено
+
 def settings_page(page: ft.Page) -> ft.Column:
     def theme_changed(e):
         selected_theme = e.control.value
         
         if selected_theme == "dark":
             page.theme_mode = ft.ThemeMode.DARK
+            page.theme = None
         elif selected_theme == "dark_green":
             page.theme_mode = ft.ThemeMode.DARK
             page.theme = ft.Theme(color_scheme_seed=ft.Colors.GREEN)
@@ -113,6 +136,18 @@ def settings_page(page: ft.Page) -> ft.Column:
         ],
         on_change=cell_shape_changed
     )
+    
+    def birthday_display_changed(e):
+        save_birthday_display_to_db(e.control.value)
+    
+    # Загружаем настройку отображения дней рождения из БД
+    show_birthdays = load_birthday_display_from_db()
+    
+    birthday_checkbox = ft.Checkbox(
+        label="Показывать контейнер дней рождения на главной странице",
+        value=show_birthdays,
+        on_change=birthday_display_changed
+    )
 
     def import_to_excel(e):
         success, message = export_assignments_to_excel()
@@ -131,6 +166,7 @@ def settings_page(page: ft.Page) -> ft.Column:
             ft.Text("Настройки", size=24, weight="bold"),
             theme_dropdown,
             cell_shape_dropdown,
+            birthday_checkbox,
             ft.Divider(),
             ft.Text("Импорт данных"),
             ft.ElevatedButton(

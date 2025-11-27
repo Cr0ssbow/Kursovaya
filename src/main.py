@@ -15,24 +15,19 @@ from views.notes import notes_page
 from views.terminated import terminated_page
 from database.models import Employee
 from datetime import datetime
+from utils.photo_manager import PhotoManager
 
-def check_birthdays():
-    """Проверяет дни рождения сотрудников на сегодня"""
-    today = datetime.now().date()
-    birthday_employees = []
-    
-    for employee in Employee.select():
-        if employee.birth_date.month == today.month and employee.birth_date.day == today.day:
-            birthday_employees.append(employee.full_name)
-    
-    return birthday_employees
+
 
 def main(page: ft.Page):
+    # Инициализируем менеджер фотографий (создает папки)
+    photo_manager = PhotoManager()
+    
     page.title = "ЧОП Легион - Система учёта сотрудников"
     if getattr(sys, 'frozen', False):
         icon_path = os.path.join(sys._MEIPASS, 'assets', 'legion.ico')
     else:
-        icon_path = os.path.abspath("D:/Kursovaya/src/assets/legion.ico")
+        icon_path = os.path.join(os.path.dirname(__file__), 'assets', 'legion.ico')
     page.window.icon = icon_path
     page.window_width = 800
     page.window_height = 600
@@ -43,6 +38,7 @@ def main(page: ft.Page):
     
     if theme == "dark":
         page.theme_mode = ft.ThemeMode.DARK
+        page.theme = None
     elif theme == "dark_green":
         page.theme_mode = ft.ThemeMode.DARK
         page.theme = ft.Theme(color_scheme_seed=ft.Colors.GREEN)
@@ -65,24 +61,7 @@ def main(page: ft.Page):
         page.theme_mode = ft.ThemeMode.LIGHT
         page.theme = None
     
-    # Проверяем дни рождения при запуске
-    birthday_employees = check_birthdays()
-    birthday_banner = None
-    if birthday_employees:
-        birthday_banner = ft.Container(
-            content=ft.Row([
-                ft.Icon(ft.Icons.CAKE, color=ft.Colors.WHITE),
-                ft.Text(f"День рождения: {', '.join(birthday_employees)}", weight="bold", color=ft.Colors.WHITE),
-                ft.IconButton(ft.Icons.CLOSE, icon_color=ft.Colors.WHITE, on_click=lambda e: hide_banner())
-            ]),
-            bgcolor=ft.Colors.PRIMARY,
-            padding=10,
-            border_radius=5
-        )
-        
-        def hide_banner():
-            birthday_banner.visible = False
-            page.update()
+
 
     # Контейнер для отображения текущей страницы
     content_container = ft.Container(
@@ -150,7 +129,7 @@ def main(page: ft.Page):
             ),
             ft.Divider(),
             content_container,
-            birthday_banner if birthday_banner else ft.Container(height=0),
+
         ], expand=True)
     )
     

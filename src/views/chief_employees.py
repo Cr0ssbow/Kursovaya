@@ -1,5 +1,5 @@
 import flet as ft
-from database.models import ChiefEmployee
+from database.models import ChiefEmployee, Object, ChiefObjectAssignment, db
 from datetime import datetime
 from base.base_employee_page import BaseEmployeePage
 
@@ -52,16 +52,39 @@ class ChiefEmployeesPage(BaseEmployeePage):
         ])
     
     def _get_detail_title(self):
-        return "Информация о начальнике"
+        return "Карточка начальника"
     
     def _get_detail_content(self, employee):
-        return [
-            ft.Text(f"Дата рождения: {self.format_date(employee.birth_date)}", size=16),
-            ft.Text(f"Должность: {employee.position}", size=16),
-            ft.Text(f"Зарплата: {employee.salary} ₽", size=16),
-            ft.Text(f"Способ выдачи зарплаты: {employee.payment_method}", size=16),
-            ft.Text(f"Компания: {getattr(employee, 'company', 'Легион')}", size=16),
+        # Получаем закрепленные объекты
+        assigned_objects = []
+        try:
+            if db.is_closed():
+                db.connect()
+            assignments = ChiefObjectAssignment.select().where(ChiefObjectAssignment.chief == employee)
+            assigned_objects = [assignment.object.name for assignment in assignments]
+        except Exception as e:
+            print(f"Ошибка получения объектов: {e}")
+        finally:
+            if not db.is_closed():
+                db.close()
+        
+        objects_text = ", ".join(assigned_objects) if assigned_objects else "Нет закрепленных объектов"
+        
+        content = [
+            ft.Row([
+                ft.Column([
+                    self.get_photo_widget(employee.full_name),
+                    ft.Text(f"Дата рождения: {self.format_date(employee.birth_date)}", size=16),
+                    ft.Text(f"Должность: {employee.position}", size=16),
+                    ft.Text(f"Зарплата: {employee.salary} ₽", size=16),
+                    ft.Text(f"Способ выдачи зарплаты: {employee.payment_method}", size=16),
+                    ft.Text(f"Компания: {getattr(employee, 'company', 'Легион')}", size=16),
+                    ft.Text(f"Закрепленные объекты: {objects_text}", size=16),
+                ]),
+                ft.Container(expand=True)
+            ])
         ]
+        return content
     
     def _get_add_title(self):
         return "Добавить начальника охраны"
@@ -86,7 +109,7 @@ class ChiefEmployeesPage(BaseEmployeePage):
         birth_date = datetime.strptime(birth_value, "%d.%m.%Y").date()
         salary = float(salary_value) if salary_value else 0
         
-        ChiefEmployee.create(
+        employee = ChiefEmployee.create(
             full_name=full_name,
             birth_date=birth_date,
             position=position_value,
@@ -94,6 +117,8 @@ class ChiefEmployeesPage(BaseEmployeePage):
             payment_method=payment_method_value or "на карту",
             company=self.company_field.value or "Легион"
         )
+        
+
         return True
     
     def _get_success_message(self):
@@ -148,11 +173,126 @@ class ChiefEmployeesPage(BaseEmployeePage):
         self.current_employee.salary = salary
         self.current_employee.payment_method = payment_method_value or "на карту"
         self.current_employee.company = self.edit_company_field.value or "Легион"
+        
         self.current_employee.save()
         return True
     
     def _get_employee_type(self):
         return "начальника"
+    
+    def show_detail_dialog(self, employee):
+        """Переопределяем для добавления кнопки управления объектами"""
+        self.detail_dialog.title = ft.Text(f"{self._get_detail_title()}: {employee.full_name}")
+        self.detail_dialog.content = ft.Column(self._get_detail_content(employee), spacing=10, height=500, width=600)
+        self.detail_dialog.actions = [
+            ft.TextButton("Изменить фотографию", on_click=lambda e, emp=employee: self.change_photo(emp)),
+            ft.TextButton("Управление объектами", on_click=lambda e: self.show_objects_dialog(employee)),
+            ft.TextButton("Редактировать", on_click=lambda e, emp=employee: (self.close_detail_dialog(), self.show_edit_dialog(emp))),
+            ft.TextButton("Уволить", on_click=lambda e, emp=employee: (self.close_detail_dialog(), self.show_termination_dialog(emp)), style=ft.ButtonStyle(color=ft.Colors.RED)),
+            ft.TextButton("Закрыть", on_click=lambda e: self.close_detail_dialog())
+        ]
+        self.detail_dialog.open = True
+        if self.page and self.detail_dialog not in self.page.overlay:
+            self.page.overlay.append(self.detail_dialog)
+        if self.page:
+            self.page.update()
+    
+    def show_objects_dialog(self, chief):
+        """Показывает диалог управления объектами"""
+        try:
+            if db.is_closed():
+                db.connect()
+            
+            # Получаем все объекты
+            all_objects = list(Object.select())
+            
+            # Получаем уже назначенные объекты
+            assigned_objects = set()
+            assignments = ChiefObjectAssignment.select().where(ChiefObjectAssignment.chief == chief)
+            for assignment in assignments:
+                assigned_objects.add(assignment.object.id)
+            
+            # Создаем чекбоксы для объектов
+            object_checkboxes = []
+            for obj in all_objects:
+                checkbox = ft.Checkbox(
+                    label=obj.name,
+                    value=obj.id in assigned_objects,
+                    data=obj.id
+                )
+                object_checkboxes.append(checkbox)
+            
+            def save_assignments():
+                try:
+                    if db.is_closed():
+                        db.connect()
+                    
+                    # Удаляем все текущие назначения
+                    ChiefObjectAssignment.delete().where(ChiefObjectAssignment.chief == chief).execute()
+                    
+                    # Добавляем новые назначения
+                    for checkbox in object_checkboxes:
+                        if checkbox.value:
+                            obj = Object.get_by_id(checkbox.data)
+                            ChiefObjectAssignment.create(chief=chief, object=obj)
+                    
+                    self.page.close(objects_dialog)
+                    self.show_snackbar("Объекты обновлены!")
+                    
+                except Exception as e:
+                    self.show_snackbar(f"Ошибка: {str(e)}", True)
+                finally:
+                    if not db.is_closed():
+                        db.close()
+            
+            objects_dialog = ft.AlertDialog(
+                title=ft.Text(f"Управление объектами - {chief.full_name}"),
+                content=ft.Container(
+                    content=ft.Column(object_checkboxes, scroll=ft.ScrollMode.AUTO),
+                    width=400,
+                    height=300
+                ),
+                actions=[
+                    ft.TextButton("Сохранить", on_click=lambda e: save_assignments()),
+                    ft.TextButton("Отмена", on_click=lambda e: self.page.close(objects_dialog))
+                ]
+            )
+            
+            self.page.overlay.append(objects_dialog)
+            self.page.update()
+            self.page.open(objects_dialog)
+            
+        except Exception as e:
+            self.show_snackbar(f"Ошибка: {str(e)}", True)
+        finally:
+            if not db.is_closed():
+                db.close()
+
+    def change_photo(self, employee):
+        """Изменение фотографии сотрудника"""
+        def on_result(e: ft.FilePickerResultEvent):
+            if e.files:
+                try:
+                    photo_path = self.photo_manager.save_photo(employee.full_name, e.files[0].path)
+                    employee.photo_path = photo_path
+                    employee.save()
+                    self.show_snackbar("Фотография обновлена!")
+                    self.close_detail_dialog()
+                except Exception as ex:
+                    self.show_snackbar(f"Ошибка сохранения фото: {ex}", True)
+        
+        file_picker = ft.FilePicker(on_result=on_result)
+        if self.page and file_picker not in self.page.overlay:
+            self.page.overlay.append(file_picker)
+            self.page.update()
+        file_picker.pick_files(
+            dialog_title="Выберите фотографию или PDF",
+            allowed_extensions=["jpg", "jpeg", "png", "bmp", "pdf"]
+        )
+    
+
+    
+
 
 # Функция-обертка для совместимости
 def chief_employees_page(page: ft.Page = None) -> ft.Column:

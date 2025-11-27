@@ -2,6 +2,8 @@ import flet as ft
 from abc import abstractmethod
 from datetime import datetime
 from base.base_page import BasePage
+from utils.photo_manager import PhotoManager
+import os
 
 class BaseEmployeePage(BasePage):
     """Базовый класс для страниц управления сотрудниками"""
@@ -13,6 +15,7 @@ class BaseEmployeePage(BasePage):
         self.detail_dialog = None
         self.show_nord = True
         self.show_legion = True
+        self.photo_manager = PhotoManager()
         self._init_components()
     
     def _init_components(self):
@@ -66,18 +69,80 @@ class BaseEmployeePage(BasePage):
     
     def show_detail_dialog(self, employee):
         """Показывает диалог с детальной информацией"""
-        self.detail_dialog.title = ft.Text(f"{self._get_detail_title()}: {employee.full_name}")
-        self.detail_dialog.content = ft.Column(self._get_detail_content(employee), spacing=10, height=200)
-        self.detail_dialog.actions = [
+        self.current_detail_employee = employee
+        self.detail_page_index = 0
+        self.detail_pages = self._get_detail_pages(employee)
+        
+        self._update_detail_dialog()
+    
+    def _get_detail_pages(self, employee):
+        """Возвращает список страниц для диалога"""
+        # По умолчанию одна страница - основная информация
+        return [{
+            'title': 'Основная информация',
+            'content': self._get_detail_content(employee)
+        }]
+    
+    def _update_detail_dialog(self):
+        """Обновляет содержимое диалога"""
+        employee = self.current_detail_employee
+        self.detail_pages = self._get_detail_pages(employee)
+        current_page = self.detail_pages[self.detail_page_index]
+        
+        # Кнопки навигации
+        prev_btn = ft.IconButton(
+            icon=ft.Icons.ARROW_BACK,
+            on_click=lambda e: self.navigate_detail_page(-1),
+            disabled=self.detail_page_index == 0
+        )
+        next_btn = ft.IconButton(
+            icon=ft.Icons.ARROW_FORWARD,
+            on_click=lambda e: self.navigate_detail_page(1),
+            disabled=self.detail_page_index >= len(self.detail_pages) - 1
+        )
+        
+        # Индикатор страниц
+        page_indicator = ft.Text(f"{self.detail_page_index + 1} / {len(self.detail_pages)}", size=12)
+        
+        self.detail_dialog.title = ft.Column([
+            ft.Row([
+                prev_btn,
+                ft.Text(f"{self._get_detail_title()}: {employee.full_name}", expand=True),
+                next_btn
+            ]),
+            ft.Row([
+                ft.Text(current_page['title'], weight="bold", expand=True),
+                page_indicator
+            ])
+        ], spacing=5)
+        
+        self.detail_dialog.content = ft.Column(current_page['content'], spacing=10, height=800, width=1300)
+        # Получаем кнопки действий для диалога
+        self.detail_dialog.actions = self._get_detail_actions(employee)
+        
+        if not self.detail_dialog.open:
+            self.detail_dialog.open = True
+            if self.page and self.detail_dialog not in self.page.overlay:
+                self.page.overlay.append(self.detail_dialog)
+        
+        if self.page:
+            self.page.update()
+    
+    def navigate_detail_page(self, direction):
+        """Навигация между страницами диалога"""
+        new_index = self.detail_page_index + direction
+        if 0 <= new_index < len(self.detail_pages):
+            self.detail_page_index = new_index
+            self._update_detail_dialog()
+    
+    def _get_detail_actions(self, employee):
+        """Возвращает кнопки действий для диалога"""
+        return [
+            ft.TextButton("Изменить фотографию", on_click=lambda e, emp=employee: self.change_photo(emp)),
             ft.TextButton("Редактировать", on_click=lambda e, emp=employee: (self.close_detail_dialog(), self.show_edit_dialog(emp))),
             ft.TextButton("Уволить", on_click=lambda e, emp=employee: (self.close_detail_dialog(), self.show_termination_dialog(emp)), style=ft.ButtonStyle(color=ft.Colors.RED)),
             ft.TextButton("Закрыть", on_click=lambda e: self.close_detail_dialog())
         ]
-        self.detail_dialog.open = True
-        if self.page and self.detail_dialog not in self.page.overlay:
-            self.page.overlay.append(self.detail_dialog)
-        if self.page:
-            self.page.update()
     
     def close_detail_dialog(self):
         """Закрывает диалог детальной информации"""
@@ -241,6 +306,70 @@ class BaseEmployeePage(BasePage):
         if self.page:
             self.page.update()
     
+
+    
+    def get_photo_widget(self, employee_name: str) -> ft.Control:
+        """Возвращает виджет с фотографией сотрудника"""
+        widget = self.photo_manager.get_photo_widget(employee_name, self.open_pdf)
+        if hasattr(widget, 'src_base64'):
+            self.current_photo_widget = widget
+        return widget
+    
+    def open_pdf(self, pdf_path):
+        """Открывает PDF файл в системном приложении"""
+        import os
+        import subprocess
+        import platform
+        
+        try:
+            if platform.system() == 'Windows':
+                os.startfile(pdf_path)
+            elif platform.system() == 'Darwin':  # macOS
+                subprocess.run(['open', pdf_path])
+            else:  # Linux
+                subprocess.run(['xdg-open', pdf_path])
+        except Exception as e:
+            self.show_snackbar(f"Ошибка открытия PDF: {e}", True)
+    
+    def change_photo(self, employee, photo_name=None, callback=None):
+        """Изменение фотографии сотрудника"""
+        def on_result(e: ft.FilePickerResultEvent):
+            if e.files:
+                try:
+                    name = photo_name or employee.full_name
+                    photo_path = self.photo_manager.save_photo(name, e.files[0].path)
+                    
+                    if callback:
+                        callback(photo_path)
+                    else:
+                        employee.photo_path = photo_path
+                        employee.save()
+                        # Обновляем диалог только если не используется callback
+                        self._update_detail_dialog()
+                    
+                    self.show_snackbar("Фотография обновлена!")
+                    # Обновляем изображение через src_base64
+                    if hasattr(self, 'current_photo_widget') and self.current_photo_widget:
+                        try:
+                            import base64
+                            with open(photo_path, "rb") as f:
+                                img_data = base64.b64encode(f.read()).decode()
+                            self.current_photo_widget.src_base64 = img_data
+                            self.current_photo_widget.update()
+                        except:
+                            pass
+                except Exception as ex:
+                    self.show_snackbar(f"Ошибка сохранения фото: {ex}", True)
+        
+        file_picker = ft.FilePicker(on_result=on_result)
+        if self.page and file_picker not in self.page.overlay:
+            self.page.overlay.append(file_picker)
+            self.page.update()
+        file_picker.pick_files(
+            dialog_title="Выберите фотографию или PDF",
+            allowed_extensions=["jpg", "jpeg", "png", "bmp", "pdf"]
+        )
+    
     def render(self) -> ft.Column:
         """Возвращает интерфейс страницы"""
         self.refresh_table()
@@ -396,3 +525,14 @@ class BaseEmployeePage(BasePage):
     def _get_employee_type(self):
         """Возвращает тип сотрудника"""
         pass
+    
+
+    
+
+    
+
+    
+
+    
+
+    
