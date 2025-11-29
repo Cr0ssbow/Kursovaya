@@ -585,12 +585,6 @@ class EmployeesPage(BaseEmployeePage):
                 file_button.text = f"Файл: {e.files[0].name}"
                 self.page.update()
         
-        def select_file(e):
-            file_picker.pick_files(
-                dialog_title="Выберите фото личной карточки",
-                allowed_extensions=["jpg", "jpeg", "png", "pdf"]
-            )
-        
         def save_card(e):
             try:
                 if not selected_file_path:

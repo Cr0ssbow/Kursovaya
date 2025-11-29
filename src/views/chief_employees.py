@@ -2,6 +2,7 @@ import flet as ft
 from database.models import ChiefEmployee, Object, ChiefObjectAssignment, db
 from datetime import datetime
 from base.base_employee_page import BaseEmployeePage
+import os
 
 class ChiefEmployeesPage(BaseEmployeePage):
     """Страница начальников охраны"""
