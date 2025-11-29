@@ -39,9 +39,8 @@ class EmployeesPage(BaseEmployeePage):
         """Создает таблицу"""
         self.employees_table = ft.DataTable(
             columns=[
-                ft.DataColumn(ft.Text("ФИО", width=300)),
-                ft.DataColumn(ft.Text("Разряд", width=80)),
-                ft.DataColumn(ft.Text("Действия", width=200)),
+                ft.DataColumn(ft.Text("ФИО", width=400)),
+                ft.DataColumn(ft.Text("Разряд", width=100)),
             ],
             rows=[],
             horizontal_lines=ft.border.BorderSide(1, ft.Colors.OUTLINE),
@@ -79,12 +78,8 @@ class EmployeesPage(BaseEmployeePage):
     def _create_table_row(self, employee):
         guard_rank_text = str(getattr(employee, 'guard_rank', '')) if getattr(employee, 'guard_rank', None) else "Не указано"
         return ft.DataRow(cells=[
-            ft.DataCell(ft.Text(employee.full_name)),
+            ft.DataCell(ft.Text(employee.full_name), on_tap=lambda e, emp=employee: self.show_basic_info(emp)),
             ft.DataCell(ft.Text(guard_rank_text)),
-            ft.DataCell(ft.Row([
-                ft.ElevatedButton("Основная информация", on_click=lambda e, emp=employee: self.show_basic_info(emp), height=30),
-                ft.ElevatedButton("Карточки", on_click=lambda e, emp=employee: self.show_personal_cards(emp), height=30)
-            ], spacing=5))
         ])
     
     def _get_detail_title(self):
@@ -186,10 +181,13 @@ class EmployeesPage(BaseEmployeePage):
                 file_button.text = "Выбрать файл"
                 
                 if dialog_ref:
-                    dialog_ref.content.controls.clear()
-                    new_content = self._get_personal_cards_content(employee, dialog_ref)
-                    dialog_ref.content.controls.extend(new_content)
-                    dialog_ref.content.update()
+                    if hasattr(dialog_ref, 'tabs_ref'):
+                        dialog_ref.tabs_ref.tabs[1].content = ft.Column(self._get_personal_cards_content(employee, dialog_ref), scroll=ft.ScrollMode.AUTO)
+                    else:
+                        dialog_ref.content.controls.clear()
+                        new_content = self._get_personal_cards_content(employee, dialog_ref)
+                        dialog_ref.content.controls.extend(new_content)
+                        dialog_ref.content.update()
                     self.page.update()
             except Exception as ex:
                 self.show_snackbar(f"Ошибка: {ex}", True)
@@ -282,11 +280,15 @@ class EmployeesPage(BaseEmployeePage):
                 date_dialog.open = False
                 self.page.update()
                 if dialog_to_update:
-                    dialog_to_update.content.controls.clear()
-                    new_content = self._get_personal_cards_content(employee, dialog_to_update)
-                    dialog_to_update.content.controls.extend(new_content)
-                    dialog_to_update.content.update()
-                    self.page.update()
+                    if hasattr(dialog_to_update, 'tabs_ref'):
+                        dialog_to_update.tabs_ref.tabs[1].content = ft.Column(self._get_personal_cards_content(employee, dialog_to_update), scroll=ft.ScrollMode.AUTO)
+                        self.page.update()
+                    else:
+                        dialog_to_update.content.controls.clear()
+                        new_content = self._get_personal_cards_content(employee, dialog_to_update)
+                        dialog_to_update.content.controls.extend(new_content)
+                        dialog_to_update.content.update()
+                        self.page.update()
             except Exception as ex:
                 self.show_snackbar(f"Ошибка: {ex}", True)
         
@@ -309,29 +311,70 @@ class EmployeesPage(BaseEmployeePage):
         try:
             card.delete_instance()
             if dialog_to_update:
-                dialog_to_update.content.controls.clear()
-                new_content = self._get_personal_cards_content(employee, dialog_to_update)
-                dialog_to_update.content.controls.extend(new_content)
-                dialog_to_update.content.update()
-                self.page.update()
+                if hasattr(dialog_to_update, 'tabs_ref'):
+                    dialog_to_update.tabs_ref.tabs[1].content = ft.Column(self._get_personal_cards_content(employee, dialog_to_update), scroll=ft.ScrollMode.AUTO)
+                    self.page.update()
+                else:
+                    dialog_to_update.content.controls.clear()
+                    new_content = self._get_personal_cards_content(employee, dialog_to_update)
+                    dialog_to_update.content.controls.extend(new_content)
+                    dialog_to_update.content.update()
+                    self.page.update()
         except:
             pass
     
     def show_basic_info(self, employee):
-        """Показывает диалог с основной информацией"""
-        basic_dialog = ft.AlertDialog(
-            title=ft.Text(f"Основная информация: {employee.full_name}"),
-            content=ft.Column(self._get_detail_content(employee), height=600, width=800, scroll=ft.ScrollMode.AUTO),
+        """Показывает диалог с вкладками"""
+        self.show_basic_info_with_tabs(employee)
+
+    
+    def show_basic_info_with_tabs(self, employee):
+        """Показывает диалог с вкладками"""
+        tabs = ft.Tabs(
+            selected_index=0,
+            tabs=[
+                ft.Tab(
+                    text="Основная информация",
+                    content=ft.Column(self._get_detail_content(employee), scroll=ft.ScrollMode.AUTO)
+                ),
+                ft.Tab(
+                    text="Личные карточки",
+                    content=ft.Column([], scroll=ft.ScrollMode.AUTO)
+                ),
+                ft.Tab(
+                    text="Документы",
+                    content=ft.Column([], scroll=ft.ScrollMode.AUTO)
+                )
+            ],
+            expand=True
+        )
+        
+        tabs_dialog = ft.AlertDialog(
+            title=ft.Text(f"Информация о сотруднике: {employee.full_name}"),
+            content=tabs,
             actions=[
                 ft.TextButton("Изменить фотографию", on_click=lambda e: self.change_photo(employee)),
                 ft.TextButton("Редактировать", on_click=lambda e: self.show_edit_dialog(employee)),
                 ft.TextButton("Уволить", on_click=lambda e: self.show_termination_dialog(employee), style=ft.ButtonStyle(color=ft.Colors.RED)),
-                ft.TextButton("Закрыть", on_click=lambda e: setattr(basic_dialog, 'open', False) or self.page.update())
+                ft.TextButton("Закрыть", on_click=lambda e: setattr(tabs_dialog, 'open', False) or self.page.update())
             ],
             modal=True
         )
-        self.page.overlay.append(basic_dialog)
-        basic_dialog.open = True
+        
+        # Сохраняем ссылку на tabs в диалоге
+        tabs_dialog.tabs_ref = tabs
+        
+        def on_tab_change(e):
+            if e.control.selected_index == 1:  # Карточки
+                tabs.tabs[1].content = ft.Column(self._get_personal_cards_content(employee, tabs_dialog), scroll=ft.ScrollMode.AUTO)
+            elif e.control.selected_index == 2:  # Документы
+                tabs.tabs[2].content = ft.Column(self._get_documents_content(employee, tabs_dialog), scroll=ft.ScrollMode.AUTO)
+            self.page.update()
+        
+        tabs.on_change = on_tab_change
+        
+        self.page.overlay.append(tabs_dialog)
+        tabs_dialog.open = True
         self.page.update()
     
     def show_personal_cards(self, employee):
@@ -344,12 +387,180 @@ class EmployeesPage(BaseEmployeePage):
             ],
             modal=True
         )
-        # Заполняем содержимое после создания диалога
         cards_dialog.content = ft.Column(self._get_personal_cards_content(employee, cards_dialog), height=600, width=800, scroll=ft.ScrollMode.AUTO)
         
         self.page.overlay.append(cards_dialog)
         cards_dialog.open = True
         self.page.update()
+    
+    def show_documents(self, employee):
+        """Показывает диалог с документами"""
+        docs_dialog = ft.AlertDialog(
+            title=ft.Text(f"Документы: {employee.full_name}"),
+            content=ft.Column([], height=600, width=800, scroll=ft.ScrollMode.AUTO),
+            actions=[
+                ft.TextButton("Закрыть", on_click=lambda e: setattr(docs_dialog, 'open', False) or self.page.update())
+            ],
+            modal=True
+        )
+        docs_dialog.content = ft.Column(self._get_documents_content(employee, docs_dialog), height=600, width=800, scroll=ft.ScrollMode.AUTO)
+        
+        self.page.overlay.append(docs_dialog)
+        docs_dialog.open = True
+        self.page.update()
+    
+    def _get_documents_content(self, employee, dialog_ref=None):
+        """Возвращает содержимое страницы документов"""
+        from database.models import EmployeeDocument
+        
+        docs = list(EmployeeDocument.select().where(EmployeeDocument.guard_employee == employee).order_by(EmployeeDocument.created_at.desc()))
+        
+        # Форма добавления
+        doc_name_field = ft.TextField(
+            label="Название документа",
+            width=200
+        )
+        
+        selected_file_path = [None]
+        file_button = ft.ElevatedButton("Выбрать файл", width=120)
+        
+        def on_file_result(e: ft.FilePickerResultEvent):
+            if e.files:
+                selected_file_path[0] = e.files[0].path
+                file_button.text = f"Файл: {e.files[0].name[:10]}..."
+                self.page.update()
+        
+        def select_file(e):
+            file_picker = ft.FilePicker(on_result=on_file_result)
+            self.page.overlay.append(file_picker)
+            self.page.update()
+            file_picker.pick_files(
+                dialog_title="Выберите документ",
+                allowed_extensions=["jpg", "jpeg", "png", "pdf"]
+            )
+        
+        def save_document(e):
+            try:
+                if not selected_file_path[0]:
+                    self.show_snackbar("Выберите файл!", True)
+                    return
+                
+                doc_name = doc_name_field.value.strip()
+                if not doc_name:
+                    self.show_snackbar("Название документа обязательно!", True)
+                    return
+                
+                saved_path = self.save_document(employee, selected_file_path[0], doc_name)
+                
+                # Очищаем форму
+                doc_name_field.value = ""
+                selected_file_path[0] = None
+                file_button.text = "Выбрать файл"
+                
+                if dialog_ref:
+                    if hasattr(dialog_ref, 'tabs_ref'):
+                        dialog_ref.tabs_ref.tabs[2].content = ft.Column(self._get_documents_content(employee, dialog_ref), scroll=ft.ScrollMode.AUTO)
+                        self.page.update()
+                    else:
+                        dialog_ref.content.controls.clear()
+                        new_content = self._get_documents_content(employee, dialog_ref)
+                        dialog_ref.content.controls.extend(new_content)
+                        dialog_ref.content.update()
+                        self.page.update()
+            except Exception as ex:
+                self.show_snackbar(f"Ошибка: {ex}", True)
+        
+        file_button.on_click = select_file
+        
+        add_form = ft.Column([
+            ft.Text("Добавить документ", weight="bold"),
+            ft.Row([doc_name_field, file_button, ft.ElevatedButton("Сохранить", on_click=save_document, width=100)], spacing=10)
+        ], spacing=5)
+        
+        docs_list = []
+        if docs:
+            for i, doc in enumerate(docs):
+                def make_view_handler(doc_to_view):
+                    return lambda e: self.view_document(doc_to_view)
+                
+                def make_delete_handler(doc_to_delete):
+                    return lambda e: self.delete_document_simple(doc_to_delete, employee, dialog_ref)
+                
+                docs_list.append(
+                    ft.ListTile(
+                        title=ft.Text(doc.document_type),
+                        subtitle=ft.Text(f"Добавлен: {doc.created_at.strftime('%d.%m.%Y')}"),
+                        trailing=ft.Row([
+                            ft.IconButton(ft.Icons.VISIBILITY, on_click=make_view_handler(doc)),
+                            ft.IconButton(ft.Icons.DELETE, on_click=make_delete_handler(doc))
+                        ], tight=True)
+                    )
+                )
+        else:
+            docs_list.append(ft.Text("Нет документов", size=16, color=ft.Colors.GREY))
+        
+        return [
+            ft.Text("Документы", size=20, weight="bold"),
+            add_form,
+            ft.Column(docs_list, spacing=5, scroll=ft.ScrollMode.AUTO, height=450)
+        ]
+    
+    def save_document(self, employee, file_path, doc_name):
+        from database.models import EmployeeDocument
+        import shutil
+        from pathlib import Path
+        from PIL import Image
+        
+        safe_name = "".join(c for c in employee.full_name if c.isalnum() or c in (' ', '-', '_')).strip().replace(' ', '_')
+        docs_folder = Path(f"storage/data/Сотрудники охраны/{safe_name}/документы")
+        docs_folder.mkdir(parents=True, exist_ok=True)
+        
+        source_file = Path(file_path)
+        doc_count = EmployeeDocument.select().where(EmployeeDocument.guard_employee == employee).count() + 1
+        
+        # Конвертируем JPG в PNG
+        if source_file.suffix.lower() in ['.jpg', '.jpeg']:
+            dest_file = docs_folder / f"doc_{doc_count}.png"
+            try:
+                with Image.open(source_file) as img:
+                    img.save(dest_file, 'PNG')
+            except:
+                dest_file = docs_folder / f"doc_{doc_count}{source_file.suffix}"
+                shutil.copy2(source_file, dest_file)
+        else:
+            dest_file = docs_folder / f"doc_{doc_count}{source_file.suffix}"
+            shutil.copy2(source_file, dest_file)
+        
+        EmployeeDocument.create(
+            guard_employee=employee,
+            document_type=doc_name,
+            page_number=1,
+            file_path=str(dest_file)
+        )
+        
+        return str(dest_file)
+    
+    def view_document(self, doc):
+        if doc.file_path and os.path.exists(doc.file_path):
+            self.open_pdf(doc.file_path)
+        else:
+            self.show_snackbar("Файл не найден", True)
+    
+    def delete_document_simple(self, doc, employee, dialog_to_update=None):
+        try:
+            doc.delete_instance()
+            if dialog_to_update:
+                if hasattr(dialog_to_update, 'tabs_ref'):
+                    dialog_to_update.tabs_ref.tabs[2].content = ft.Column(self._get_documents_content(employee, dialog_to_update), scroll=ft.ScrollMode.AUTO)
+                    self.page.update()
+                else:
+                    dialog_to_update.content.controls.clear()
+                    new_content = self._get_documents_content(employee, dialog_to_update)
+                    dialog_to_update.content.controls.extend(new_content)
+                    dialog_to_update.content.update()
+                    self.page.update()
+        except:
+            pass
     
     def add_personal_card(self, employee):
         """Добавляет личную карточку"""
