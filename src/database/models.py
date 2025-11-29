@@ -11,8 +11,7 @@ DB_HOST = os.getenv('DB_HOST', 'localhost')
 DB_PORT = os.getenv('DB_PORT', 5432)
 DB_NAME = os.getenv('DB_NAME', 'legion_employees')
 DB_USER = os.getenv('DB_USER', 'postgres')
-DB_PASSWORD = os.getenv('DB_PASSWORD', 'password')
-
+DB_PASSWORD = os.getenv('DB_PASSWORD', 'admin')
 # Инициализация базы данных PostgreSQL
 db = PostgresqlDatabase(
     DB_NAME,
@@ -224,9 +223,16 @@ def init_database():
         except:
             pass  # Столбец уже существует
             
+        # Создаем настройку темы по умолчанию
+        try:
+            Settings.get(Settings.key == "theme")
+        except:
+            Settings.create(key="theme", value="light")
+            
     except Exception as e:
         print(f"Ошибка подключения к PostgreSQL: {e}")
         print("Убедитесь, что PostgreSQL запущен и настройки подключения корректны")
+        raise
 
 # Инициализируем базу данных при импорте
 if __name__ != '__main__':

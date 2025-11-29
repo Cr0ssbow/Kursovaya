@@ -331,6 +331,54 @@ class BaseEmployeePage(BasePage):
         except Exception as e:
             self.show_snackbar(f"Ошибка открытия PDF: {e}", True)
     
+    def get_employee_folder_type(self):
+        """Возвращает тип папки для сотрудника"""
+        # Переопределяется в дочерних классах
+        return "Сотрудник охраны"
+    
+    def save_personal_card(self, employee, file_path):
+        """Сохраняет личную карточку в правильную структуру папок"""
+        from database.models import PersonalCard
+        from datetime import date
+        import shutil
+        from pathlib import Path
+        from PIL import Image
+        
+        # Создаем структуру папок
+        safe_name = "".join(c for c in employee.full_name if c.isalnum() or c in (' ', '-', '_')).strip().replace(' ', '_')
+        folder_type = self.get_employee_folder_type()
+        cards_folder = Path(f"storage/data/{folder_type}/{safe_name}/карточки")
+        cards_folder.mkdir(parents=True, exist_ok=True)
+        
+        source_file = Path(file_path)
+        card_count = PersonalCard.select().where(
+            (PersonalCard.guard_employee == employee) if hasattr(PersonalCard, 'guard_employee') else
+            (PersonalCard.chief_employee == employee) if hasattr(PersonalCard, 'chief_employee') else
+            False
+        ).count() + 1
+        
+        # Конвертируем JPG в PNG
+        if source_file.suffix.lower() in ['.jpg', '.jpeg']:
+            dest_file = cards_folder / f"card_{card_count}.png"
+            try:
+                with Image.open(source_file) as img:
+                    img.save(dest_file, 'PNG')
+            except:
+                # Если конвертация не удалась, копируем как есть
+                dest_file = cards_folder / f"card_{card_count}{source_file.suffix}"
+                shutil.copy2(source_file, dest_file)
+        else:
+            dest_file = cards_folder / f"card_{card_count}{source_file.suffix}"
+            shutil.copy2(source_file, dest_file)
+        
+        # Создаем запись в БД
+        if hasattr(PersonalCard, 'guard_employee') and hasattr(employee, 'guard_rank'):
+            PersonalCard.create(guard_employee=employee, issue_date=date.today(), photo_path=str(dest_file))
+        elif hasattr(PersonalCard, 'chief_employee') and hasattr(employee, 'position'):
+            PersonalCard.create(chief_employee=employee, issue_date=date.today(), photo_path=str(dest_file))
+        
+        return str(dest_file)
+    
     def change_photo(self, employee, photo_name=None, callback=None):
         """Изменение фотографии сотрудника"""
         def on_result(e: ft.FilePickerResultEvent):
@@ -344,8 +392,6 @@ class BaseEmployeePage(BasePage):
                     else:
                         employee.photo_path = photo_path
                         employee.save()
-                        # Обновляем диалог только если не используется callback
-                        self._update_detail_dialog()
                     
                     self.show_snackbar("Фотография обновлена!")
                     # Обновляем изображение через src_base64

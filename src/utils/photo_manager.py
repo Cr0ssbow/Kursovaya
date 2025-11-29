@@ -42,8 +42,28 @@ class PhotoManager:
         photo_filename = f"photo{file_extension}"
         photo_path = employee_folder / photo_filename
         
-        # Копируем файл
-        shutil.copy2(source_path, photo_path)
+        # Безопасное обновление: переименовать → сохранить → удалить
+        old_photo_path = self.get_photo_path(employee_name)
+        backup_path = None
+        
+        try:
+            # 1. Переименовываем старое фото в backup
+            if old_photo_path and os.path.exists(old_photo_path):
+                backup_path = Path(old_photo_path).with_suffix('.backup')
+                os.rename(old_photo_path, backup_path)
+            
+            # 2. Сохраняем новое фото
+            shutil.copy2(source_path, photo_path)
+            
+            # 3. Удаляем backup
+            if backup_path and backup_path.exists():
+                os.remove(backup_path)
+                
+        except Exception as e:
+            # Восстанавливаем старое фото при ошибке
+            if backup_path and backup_path.exists():
+                os.rename(backup_path, old_photo_path)
+            raise e
         
         return str(photo_path)
     
@@ -91,20 +111,13 @@ class PhotoManager:
                     alignment=ft.alignment.center
                 )
             else:
-                import base64
-                try:
-                    with open(photo_path, "rb") as f:
-                        img_data = base64.b64encode(f.read()).decode()
-                    widget = ft.Image(
-                        src_base64=img_data,
-                        width=150,
-                        height=150,
-                        fit=ft.ImageFit.COVER,
-                        border_radius=ft.border_radius.all(10)
-                    )
-                    return widget
-                except Exception as e:
-                    pass
+                return ft.Image(
+                    src=photo_path,
+                    width=150,
+                    height=150,
+                    fit=ft.ImageFit.COVER,
+                    border_radius=ft.border_radius.all(10)
+                )
         
         return ft.Container(
             content=ft.Icon(ft.Icons.PERSON, size=75),

@@ -39,8 +39,9 @@ class EmployeesPage(BaseEmployeePage):
         """Создает таблицу"""
         self.employees_table = ft.DataTable(
             columns=[
-                ft.DataColumn(ft.Text("ФИО", width=400)),
-                ft.DataColumn(ft.Text("Разряд", width=100)),
+                ft.DataColumn(ft.Text("ФИО", width=300)),
+                ft.DataColumn(ft.Text("Разряд", width=80)),
+                ft.DataColumn(ft.Text("Действия", width=200)),
             ],
             rows=[],
             horizontal_lines=ft.border.BorderSide(1, ft.Colors.OUTLINE),
@@ -78,12 +79,29 @@ class EmployeesPage(BaseEmployeePage):
     def _create_table_row(self, employee):
         guard_rank_text = str(getattr(employee, 'guard_rank', '')) if getattr(employee, 'guard_rank', None) else "Не указано"
         return ft.DataRow(cells=[
-            ft.DataCell(ft.Text(employee.full_name), on_tap=lambda e, emp=employee: self.show_detail_dialog(emp)),
+            ft.DataCell(ft.Text(employee.full_name)),
             ft.DataCell(ft.Text(guard_rank_text)),
+            ft.DataCell(ft.Row([
+                ft.ElevatedButton("Основная информация", on_click=lambda e, emp=employee: self.show_basic_info(emp), height=30),
+                ft.ElevatedButton("Карточки", on_click=lambda e, emp=employee: self.show_personal_cards(emp), height=30)
+            ], spacing=5))
         ])
     
     def _get_detail_title(self):
         return "Информация о сотруднике"
+    
+    def _get_detail_pages(self, employee):
+        """Возвращает список страниц для диалога"""
+        return [
+            {
+                'title': 'Основная информация',
+                'content': self._get_detail_content(employee)
+            },
+            {
+                'title': 'Личные карточки',
+                'content': self._get_personal_cards_content(employee)
+            }
+        ]
     
     def _get_detail_content(self, employee):
         content = [
@@ -103,6 +121,336 @@ class EmployeesPage(BaseEmployeePage):
             ])
         ]
         return content
+    
+    def _get_personal_cards_content(self, employee, dialog_ref=None):
+        """Возвращает содержимое страницы личных карточек"""
+        from database.models import PersonalCard
+        from datetime import date
+        
+        cards = list(PersonalCard.select().where(PersonalCard.guard_employee == employee).order_by(PersonalCard.issue_date.desc()))
+        
+        # Форма добавления
+        date_field = ft.TextField(
+            label="Дата (дд.мм.гггг)",
+            value=date.today().strftime("%d.%m.%Y"),
+            width=150,
+            on_change=self.format_date_input,
+            max_length=10
+        )
+        
+        selected_file_path = [None]
+        file_button = ft.ElevatedButton("Выбрать файл", width=120)
+        
+        def on_file_result(e: ft.FilePickerResultEvent):
+            if e.files:
+                selected_file_path[0] = e.files[0].path
+                file_button.text = f"Файл: {e.files[0].name[:10]}..."
+                self.page.update()
+        
+        def select_file(e):
+            file_picker = ft.FilePicker(on_result=on_file_result)
+            self.page.overlay.append(file_picker)
+            self.page.update()
+            file_picker.pick_files(
+                dialog_title="Выберите фото карточки",
+                allowed_extensions=["jpg", "jpeg", "png", "pdf"]
+            )
+        
+        def save_card(e):
+            try:
+                if not selected_file_path[0]:
+                    self.show_snackbar("Выберите файл!", True)
+                    return
+                
+                from datetime import datetime
+                date_value = date_field.value.strip()
+                if not date_value:
+                    self.show_snackbar("Дата обязательна!", True)
+                    return
+                
+                issue_date = datetime.strptime(date_value, "%d.%m.%Y").date()
+                saved_path = self.save_personal_card(employee, selected_file_path[0])
+                
+                card = PersonalCard.select().where(
+                    PersonalCard.guard_employee == employee,
+                    PersonalCard.photo_path == saved_path
+                ).order_by(PersonalCard.created_at.desc()).first()
+                
+                if card:
+                    card.issue_date = issue_date
+                    card.save()
+                
+                # Очищаем форму
+                date_field.value = date.today().strftime("%d.%m.%Y")
+                selected_file_path[0] = None
+                file_button.text = "Выбрать файл"
+                
+                if dialog_ref:
+                    dialog_ref.content.controls.clear()
+                    new_content = self._get_personal_cards_content(employee, dialog_ref)
+                    dialog_ref.content.controls.extend(new_content)
+                    dialog_ref.content.update()
+                    self.page.update()
+            except Exception as ex:
+                self.show_snackbar(f"Ошибка: {ex}", True)
+        
+        file_button.on_click = select_file
+        
+        add_form = ft.Column([
+            ft.Text("Добавить карточку", weight="bold"),
+            ft.Row([date_field, file_button, ft.ElevatedButton("Сохранить", on_click=save_card, width=100)], spacing=10)
+        ], spacing=5)
+        
+        cards_list = []
+        if cards:
+            for i, card in enumerate(cards):
+                def make_view_handler(card_to_view):
+                    return lambda e: self.view_personal_card(card_to_view)
+                
+                def make_delete_handler(card_to_delete):
+                    return lambda e: self.delete_personal_card_simple(card_to_delete, employee, dialog_ref)
+                
+                cards_list.append(
+                    ft.ListTile(
+                        title=ft.Text(f"Карточка #{i+1}"),
+                        subtitle=ft.Text(f"Дата: {self.format_date(card.issue_date)}"),
+                        trailing=ft.Row([
+                            ft.IconButton(ft.Icons.VISIBILITY, on_click=make_view_handler(card)),
+                            ft.IconButton(ft.Icons.DELETE, on_click=make_delete_handler(card))
+                        ], tight=True)
+                    )
+                )
+        else:
+            cards_list.append(ft.Text("Нет карточек", size=16, color=ft.Colors.GREY))
+        
+        return [
+            ft.Text("Личные карточки", size=20, weight="bold"),
+            add_form,
+            ft.Column(cards_list, spacing=5, scroll=ft.ScrollMode.AUTO, height=450)
+        ]
+    
+    def get_employee_folder_type(self):
+        return "Сотрудники охраны"
+    
+    def add_personal_card_simple(self, employee, dialog_to_update=None):
+        """Упрощенное добавление личной карточки"""
+        def on_result(e: ft.FilePickerResultEvent):
+            if e.files:
+                self.show_card_date_dialog(employee, e.files[0].path, dialog_to_update)
+        
+        file_picker = ft.FilePicker(on_result=on_result)
+        self.page.overlay.append(file_picker)
+        self.page.update()
+        file_picker.pick_files(
+            dialog_title="Выберите фото карточки",
+            allowed_extensions=["jpg", "jpeg", "png", "pdf"]
+        )
+    
+    def show_card_date_dialog(self, employee, file_path, dialog_to_update=None):
+        from datetime import date
+        
+        date_field = ft.TextField(
+            label="Дата выдачи (дд.мм.гггг)",
+            value=date.today().strftime("%d.%m.%Y"),
+            width=200,
+            on_change=self.format_date_input,
+            max_length=10
+        )
+        
+        def save_card(e):
+            try:
+                from database.models import PersonalCard
+                from datetime import datetime
+                
+                date_value = date_field.value.strip()
+                if not date_value:
+                    raise ValueError("Дата выдачи обязательна!")
+                
+                issue_date = datetime.strptime(date_value, "%d.%m.%Y").date()
+                saved_path = self.save_personal_card(employee, file_path)
+                
+                # Обновляем дату в базе
+                card = PersonalCard.select().where(
+                    PersonalCard.guard_employee == employee,
+                    PersonalCard.photo_path == saved_path
+                ).order_by(PersonalCard.created_at.desc()).first()
+                
+                if card:
+                    card.issue_date = issue_date
+                    card.save()
+                
+                date_dialog.open = False
+                self.page.update()
+                if dialog_to_update:
+                    dialog_to_update.content.controls.clear()
+                    new_content = self._get_personal_cards_content(employee, dialog_to_update)
+                    dialog_to_update.content.controls.extend(new_content)
+                    dialog_to_update.content.update()
+                    self.page.update()
+            except Exception as ex:
+                self.show_snackbar(f"Ошибка: {ex}", True)
+        
+        date_dialog = ft.AlertDialog(
+            title=ft.Text("Дата выдачи карточки"),
+            content=date_field,
+            actions=[
+                ft.TextButton("Сохранить", on_click=save_card),
+                ft.TextButton("Отмена", on_click=lambda e: setattr(date_dialog, 'open', False) or self.page.update())
+            ],
+            modal=True
+        )
+        
+        self.page.overlay.append(date_dialog)
+        date_dialog.open = True
+        self.page.update()
+    
+    def delete_personal_card_simple(self, card, employee, dialog_to_update=None):
+        """Упрощенное удаление личной карточки"""
+        try:
+            card.delete_instance()
+            if dialog_to_update:
+                dialog_to_update.content.controls.clear()
+                new_content = self._get_personal_cards_content(employee, dialog_to_update)
+                dialog_to_update.content.controls.extend(new_content)
+                dialog_to_update.content.update()
+                self.page.update()
+        except:
+            pass
+    
+    def show_basic_info(self, employee):
+        """Показывает диалог с основной информацией"""
+        basic_dialog = ft.AlertDialog(
+            title=ft.Text(f"Основная информация: {employee.full_name}"),
+            content=ft.Column(self._get_detail_content(employee), height=600, width=800, scroll=ft.ScrollMode.AUTO),
+            actions=[
+                ft.TextButton("Изменить фотографию", on_click=lambda e: self.change_photo(employee)),
+                ft.TextButton("Редактировать", on_click=lambda e: self.show_edit_dialog(employee)),
+                ft.TextButton("Уволить", on_click=lambda e: self.show_termination_dialog(employee), style=ft.ButtonStyle(color=ft.Colors.RED)),
+                ft.TextButton("Закрыть", on_click=lambda e: setattr(basic_dialog, 'open', False) or self.page.update())
+            ],
+            modal=True
+        )
+        self.page.overlay.append(basic_dialog)
+        basic_dialog.open = True
+        self.page.update()
+    
+    def show_personal_cards(self, employee):
+        """Показывает диалог с личными карточками"""
+        cards_dialog = ft.AlertDialog(
+            title=ft.Text(f"Личные карточки: {employee.full_name}"),
+            content=ft.Column([], height=600, width=800, scroll=ft.ScrollMode.AUTO),
+            actions=[
+                ft.TextButton("Закрыть", on_click=lambda e: setattr(cards_dialog, 'open', False) or self.page.update())
+            ],
+            modal=True
+        )
+        # Заполняем содержимое после создания диалога
+        cards_dialog.content = ft.Column(self._get_personal_cards_content(employee, cards_dialog), height=600, width=800, scroll=ft.ScrollMode.AUTO)
+        
+        self.page.overlay.append(cards_dialog)
+        cards_dialog.open = True
+        self.page.update()
+    
+    def add_personal_card(self, employee):
+        """Добавляет личную карточку"""
+        from database.models import PersonalCard
+        from datetime import date, datetime
+        
+        # Поля для ввода даты
+        date_field = ft.TextField(
+            label="Дата выдачи (дд.мм.гггг)",
+            value=date.today().strftime("%d.%m.%Y"),
+            width=200,
+            on_change=self.format_date_input,
+            max_length=10
+        )
+        
+        selected_file_path = None
+        
+        def on_file_result(e: ft.FilePickerResultEvent):
+            nonlocal selected_file_path
+            if e.files:
+                selected_file_path = e.files[0].path
+                file_button.text = f"Файл: {e.files[0].name}"
+                self.page.update()
+        
+        def select_file(e):
+            file_picker.pick_files(
+                dialog_title="Выберите фото личной карточки",
+                allowed_extensions=["jpg", "jpeg", "png", "pdf"]
+            )
+        
+        def save_card(e):
+            try:
+                if not selected_file_path:
+                    raise ValueError("Выберите файл!")
+                
+                date_value = date_field.value.strip()
+                if not date_value:
+                    raise ValueError("Дата выдачи обязательна!")
+                
+                issue_date = datetime.strptime(date_value, "%d.%m.%Y").date()
+                
+                card = PersonalCard.create(
+                    guard_employee=employee,
+                    issue_date=issue_date,
+                    photo_path=selected_file_path
+                )
+                
+                card_dialog.open = False
+                # Обновляем страницу карточек
+                all_cards_count = PersonalCard.select().where(PersonalCard.guard_employee == employee).count()
+                self.cards_page = (all_cards_count - 1) // 13
+                self._update_detail_dialog()
+            except Exception as ex:
+                self.show_snackbar(f"Ошибка: {ex}", True)
+        
+        def select_file(e):
+            if not hasattr(self, 'card_file_picker'):
+                self.card_file_picker = ft.FilePicker(on_result=on_file_result)
+                if self.page:
+                    self.page.overlay.append(self.card_file_picker)
+                    self.page.update()
+            else:
+                self.card_file_picker.on_result = on_file_result
+            
+            self.card_file_picker.pick_files(
+                dialog_title="Выберите фото личной карточки",
+                allowed_extensions=["jpg", "jpeg", "png", "pdf"]
+            )
+        
+        file_button = ft.ElevatedButton("Выбрать файл", on_click=select_file)
+        
+        card_dialog = ft.AlertDialog(
+            title=ft.Text("Добавить личную карточку"),
+            content=ft.Column([date_field, file_button], spacing=10),
+            actions=[
+                ft.TextButton("Сохранить", on_click=save_card),
+                ft.TextButton("Отмена", on_click=lambda e: setattr(card_dialog, 'open', False))
+            ],
+            modal=True
+        )
+        
+        if self.page:
+            if card_dialog not in self.page.overlay:
+                self.page.overlay.append(card_dialog)
+            card_dialog.open = True
+            self.page.update()
+    
+    def view_personal_card(self, card):
+        """Просматривает личную карточку"""
+        if card.photo_path and os.path.exists(card.photo_path):
+            self.open_pdf(card.photo_path)
+        else:
+            self.show_snackbar("Файл не найден", True)
+    
+    def delete_personal_card(self, card, employee):
+        """Удаляет личную карточку"""
+        try:
+            card.delete_instance()
+            self._update_detail_dialog()
+        except Exception as ex:
+            self.show_snackbar(f"Ошибка: {ex}", True)
     
     def _get_add_title(self):
         return "Добавить сотрудника"
