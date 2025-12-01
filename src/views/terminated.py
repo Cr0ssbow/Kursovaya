@@ -114,7 +114,7 @@ def terminated_page(page: ft.Page = None) -> ft.Column:
             current_employee.save()
             
             close_edit_termination_dialog()
-            refresh_table()
+            refresh_list()
         except Exception as ex:
             print(f"Ошибка сохранения: {ex}")
         finally:
@@ -127,7 +127,7 @@ def terminated_page(page: ft.Page = None) -> ft.Column:
                 db.connect()
             employee.delete_instance()
             close_actions_dialog()
-            refresh_table()
+            refresh_list()
         except Exception as ex:
             print(f"Ошибка удаления: {ex}")
         finally:
@@ -182,27 +182,25 @@ def terminated_page(page: ft.Page = None) -> ft.Column:
             employee.termination_reason = None
             employee.save()
             close_actions_dialog()
-            refresh_table()
+            refresh_list()
         except:
             pass
         finally:
             if not db.is_closed():
                 db.close()
     
-    def refresh_table():
-        """Обновляет таблицу уволенных сотрудников"""
+    def refresh_list():
+        """Обновляет список уволенных сотрудников"""
         terminated_employees = get_terminated_employees()
-        terminated_table.rows.clear()
+        terminated_list.controls.clear()
         
         for employee in terminated_employees:
-            terminated_table.rows.append(
-                ft.DataRow(
-                    cells=[
-                        ft.DataCell(ft.Text(employee.full_name), on_tap=lambda e, emp=employee: show_employee_actions(emp)),
-                        ft.DataCell(ft.Text(format_date(employee.termination_date))),
-                        ft.DataCell(ft.Text(getattr(employee, 'termination_reason', '') or 'Не указана')),
-                        ft.DataCell(ft.Text(getattr(employee, 'company', 'Легион'))),
-                    ]
+            terminated_list.controls.append(
+                ft.ListTile(
+                    title=ft.Text(employee.full_name, weight="bold"),
+                    subtitle=ft.Text(f"Дата: {format_date(employee.termination_date)} | Причина: {getattr(employee, 'termination_reason', '') or 'Не указана'}"),
+                    trailing=ft.Text(getattr(employee, 'company', 'Легион')),
+                    on_click=lambda e, emp=employee: show_employee_actions(emp)
                 )
             )
         
@@ -212,27 +210,17 @@ def terminated_page(page: ft.Page = None) -> ft.Column:
     def on_search_change(e):
         nonlocal search_value
         search_value = e.control.value.strip()
-        refresh_table()
+        refresh_list()
     
-    # Создаем таблицу
-    terminated_table = ft.DataTable(
-        columns=[
-            ft.DataColumn(ft.Text("ФИО", width=200)),
-            ft.DataColumn(ft.Text("Дата увольнения", width=150)),
-            ft.DataColumn(ft.Text("Причина увольнения", width=300)),
-            ft.DataColumn(ft.Text("Компания", width=100)),
-        ],
-        rows=[],
-        horizontal_lines=ft.border.BorderSide(1, ft.Colors.OUTLINE),
-        vertical_lines=ft.border.BorderSide(1, ft.Colors.OUTLINE),
-        heading_row_height=70,
-        data_row_min_height=50,
-        data_row_max_height=50,
-        column_spacing=10,
-        width=4000,
+    # Создаем список
+    terminated_list = ft.ListView(
+        expand=True,
+        spacing=5,
+        padding=10,
+        height=500
     )
     
-    refresh_table()
+    refresh_list()
     
     return ft.Column([
         ft.Text("Уволенные сотрудники", size=24, weight="bold"),
@@ -247,7 +235,7 @@ def terminated_page(page: ft.Page = None) -> ft.Column:
             ),
         ], alignment=ft.MainAxisAlignment.START),
         ft.Container(
-            content=ft.Column([terminated_table], scroll=ft.ScrollMode.AUTO),
+            content=terminated_list,
             border=ft.border.all(1, ft.Colors.OUTLINE),
             border_radius=10,
             padding=10,

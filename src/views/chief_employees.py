@@ -17,22 +17,13 @@ class ChiefEmployeesPage(BaseEmployeePage):
         self.payment_method_field = ft.Dropdown(label="Способ выдачи зарплаты", width=250, options=[ft.dropdown.Option("на карту"), ft.dropdown.Option("на руки")], value="на карту")
         self.company_checkboxes = self._create_company_checkboxes()
     
-    def _create_table(self):
-        """Создает таблицу"""
-        self.employees_table = ft.DataTable(
-            columns=[
-                ft.DataColumn(ft.Text("ФИО", width=400)),
-                ft.DataColumn(ft.Text("Должность", width=200)),
-            ],
-            rows=[],
-            horizontal_lines=ft.border.BorderSide(1, ft.Colors.OUTLINE),
-            vertical_lines=ft.border.BorderSide(1, ft.Colors.OUTLINE),
-            heading_row_height=70,
-            data_row_min_height=50,
-            data_row_max_height=50,
-            column_spacing=10,
-            width=4000,
-            height=707
+    def _create_list(self):
+        """Создает список"""
+        self.employees_list = ft.ListView(
+            expand=True,
+            spacing=5,
+            padding=10,
+            height=500
         )
     
     def _get_base_query(self):
@@ -67,11 +58,12 @@ class ChiefEmployeesPage(BaseEmployeePage):
     def _get_order_field(self):
         return ChiefEmployee.full_name
     
-    def _create_table_row(self, employee):
-        return ft.DataRow(cells=[
-            ft.DataCell(ft.Text(employee.full_name), on_tap=lambda e, emp=employee: self.show_detail_dialog(emp)),
-            ft.DataCell(ft.Text(employee.position)),
-        ])
+    def _create_list_item(self, employee):
+        return ft.ListTile(
+            title=ft.Text(employee.full_name, weight="bold"),
+            subtitle=ft.Text(f"Должность: {employee.position}"),
+            on_click=lambda e, emp=employee: self.show_detail_dialog(emp)
+        )
     
     def _get_detail_title(self):
         return "Карточка начальника"

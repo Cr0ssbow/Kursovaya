@@ -201,6 +201,8 @@ class PersonalCard(BaseModel):
     company = ForeignKeyField(Company, backref='personal_cards', on_delete='CASCADE')
     issue_date = DateField(verbose_name="Дата выдачи")
     photo_path = CharField(max_length=500, null=True, verbose_name="Путь к фотографии карточки")
+    is_discarded = BooleanField(default=False, verbose_name="Списана")
+    discarded_date = DateField(null=True, verbose_name="Дата списания")
     created_at = DateTimeField(default=datetime.now)
     
     class Meta:
@@ -293,6 +295,18 @@ def init_database():
             db.execute_sql("ALTER TABLE objects DROP COLUMN IF EXISTS hourly_rate")
         except:
             pass
+        
+        # Миграция: добавляем поле is_discarded в personal_cards
+        try:
+            db.execute_sql("ALTER TABLE personal_cards ADD COLUMN is_discarded BOOLEAN DEFAULT FALSE")
+        except:
+            pass  # Поле уже существует
+        
+        # Миграция: добавляем поле discarded_date в personal_cards
+        try:
+            db.execute_sql("ALTER TABLE personal_cards ADD COLUMN discarded_date DATE")
+        except:
+            pass  # Поле уже существует
             
         # Создаем настройку темы по умолчанию
         try:

@@ -35,22 +35,13 @@ class EmployeesPage(BaseEmployeePage):
         self.edit_payment_method_field = ft.Dropdown(label="Способ выдачи зарплаты", width=250, options=[ft.dropdown.Option("на карту"), ft.dropdown.Option("на руки")])
         self.edit_company_checkboxes = self._create_company_checkboxes(False)
     
-    def _create_table(self):
-        """Создает таблицу"""
-        self.employees_table = ft.DataTable(
-            columns=[
-                ft.DataColumn(ft.Text("ФИО", width=400)),
-                ft.DataColumn(ft.Text("Разряд", width=100)),
-            ],
-            rows=[],
-            horizontal_lines=ft.border.BorderSide(1, ft.Colors.OUTLINE),
-            vertical_lines=ft.border.BorderSide(1, ft.Colors.OUTLINE),
-            heading_row_height=70,
-            data_row_min_height=50,
-            data_row_max_height=50,
-            column_spacing=10,
-            width=4000,
-            height=707
+    def _create_list(self):
+        """Создает список"""
+        self.employees_list = ft.ListView(
+            expand=True,
+            spacing=5,
+            padding=10,
+            height=500
         )
     
     def _get_base_query(self):
@@ -111,12 +102,13 @@ class EmployeesPage(BaseEmployeePage):
     def _get_order_field(self):
         return GuardEmployee.full_name
     
-    def _create_table_row(self, employee):
+    def _create_list_item(self, employee):
         guard_rank_text = str(getattr(employee, 'guard_rank', '')) if getattr(employee, 'guard_rank', None) else "Не указано"
-        return ft.DataRow(cells=[
-            ft.DataCell(ft.Text(employee.full_name), on_tap=lambda e, emp=employee: self.show_basic_info(emp)),
-            ft.DataCell(ft.Text(guard_rank_text)),
-        ])
+        return ft.ListTile(
+            title=ft.Text(employee.full_name, weight="bold"),
+            subtitle=ft.Text(f"Разряд: {guard_rank_text}"),
+            on_click=lambda e, emp=employee: self.show_basic_info(emp)
+        )
     
     def _get_detail_title(self):
         return "Информация о сотруднике"

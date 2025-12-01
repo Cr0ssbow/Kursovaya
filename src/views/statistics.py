@@ -100,22 +100,12 @@ def statistics_page(page: ft.Page = None):
         )
     )
     
-    # Таблица детальной статистики
-    stats_table = ft.DataTable(
-        columns=[
-            ft.DataColumn(ft.Text("Сотрудник", width=180)),
-            ft.DataColumn(ft.Text("Пропуски", width=80)),
-            ft.DataColumn(ft.Text("Премии", width=80)),
-            ft.DataColumn(ft.Text("Удержания", width=100)),
-            ft.DataColumn(ft.Text("Зарплата", width=100))
-        ],
-        rows=[],
-        horizontal_lines=ft.border.BorderSide(1, ft.Colors.OUTLINE),
-        vertical_lines=ft.border.BorderSide(1, ft.Colors.OUTLINE),
-        heading_row_height=50,
-        data_row_min_height=40,
-        width=4000,
-        height=707
+    # Список детальной статистики
+    stats_list = ft.ListView(
+        expand=True,
+        spacing=5,
+        padding=10,
+        height=500
     )
     
     def update_statistics():
@@ -129,7 +119,7 @@ def statistics_page(page: ft.Page = None):
             total_salary = 0
             
             employees = Employee.select()
-            stats_table.rows.clear()
+            stats_list.controls.clear()
             
             for employee in employees:
                 assignments = Assignment.select().where(
@@ -289,29 +279,18 @@ def statistics_page(page: ft.Page = None):
                                     db.close()
                         return on_click
                     
-                    absences_cell = ft.DataCell(
-                        ft.Text(str(emp_absences)),
-                        on_tap=show_missed_shifts(employee.id, employee.full_name) if emp_absences > 0 else None
-                    )
+                    def show_employee_details(emp_id, emp_name):
+                        # Можно добавить логику для показа деталей
+                        pass
                     
-                    bonuses_cell = ft.DataCell(
-                        ft.Text(f"{emp_bonuses:.0f} ₽"),
-                        on_tap=show_bonuses(employee.id, employee.full_name) if emp_bonuses > 0 else None
-                    )
-                    
-                    deductions_cell = ft.DataCell(
-                        ft.Text(f"{emp_deductions:.0f} ₽"),
-                        on_tap=show_deductions(employee.id, employee.full_name) if emp_deductions > 0 else None
-                    )
-                    
-                    stats_table.rows.append(
-                        ft.DataRow(cells=[
-                            ft.DataCell(ft.Text(employee.full_name)),
-                            absences_cell,
-                            bonuses_cell,
-                            deductions_cell,
-                            ft.DataCell(ft.Text(f"{emp_salary:.0f} ₽"))
-                        ])
+                    # Создаем элемент списка
+                    stats_list.controls.append(
+                        ft.ListTile(
+                            title=ft.Text(employee.full_name, weight="bold"),
+                            subtitle=ft.Text(f"Пропуски: {emp_absences} | Премии: {emp_bonuses:.0f} ₽ | Удержания: {emp_deductions:.0f} ₽"),
+                            trailing=ft.Text(f"{emp_salary:.0f} ₽", weight="bold", color=ft.Colors.BLUE),
+                            on_click=lambda e, emp_id=employee.id, emp_name=employee.full_name: show_employee_details(emp_id, emp_name)
+                        )
                     )
             
             # Обновляем карточки
@@ -369,7 +348,7 @@ def statistics_page(page: ft.Page = None):
         ft.Divider(),
         ft.Text("Детальная статистика по сотрудникам", size=18, weight="bold"),
         ft.Container(
-            content=ft.Column([stats_table], scroll=ft.ScrollMode.AUTO),
+            content=stats_list,
             border=ft.border.all(1, ft.Colors.OUTLINE),
             border_radius=10,
             padding=10,

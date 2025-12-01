@@ -10,7 +10,7 @@ class BaseEmployeePage(BasePage):
     
     def __init__(self, page: ft.Page):
         super().__init__(page)
-        self.employees_table = None
+        self.employees_list = None
         self.add_dialog = None
         self.detail_dialog = None
         self.show_nord = True
@@ -25,7 +25,7 @@ class BaseEmployeePage(BasePage):
     def _init_components(self):
         """Инициализация компонентов"""
         self._create_dialogs()
-        self._create_table()
+        self._create_list()
         self._create_pagination()
     
     def _create_dialogs(self):
@@ -44,8 +44,8 @@ class BaseEmployeePage(BasePage):
         self.next_btn = ft.IconButton(icon=ft.Icons.ARROW_FORWARD, on_click=self.next_page)
         self.page_info = ft.Text("Страница 1 из 1")
     
-    def refresh_table(self):
-        """Обновляет данные в таблице"""
+    def refresh_list(self):
+        """Обновляет данные в списке"""
         def operation():
             query = self._get_base_query()
             query = self._apply_search_filter(query)
@@ -64,9 +64,9 @@ class BaseEmployeePage(BasePage):
             end_idx = start_idx + self.page_size
             page_employees = all_employees[start_idx:end_idx]
             
-            self.employees_table.rows.clear()
+            self.employees_list.controls.clear()
             for employee in page_employees:
-                self.employees_table.rows.append(self._create_table_row(employee))
+                self.employees_list.controls.append(self._create_list_item(employee))
             
             # Обновляем кнопки пагинации
             total_pages = (len(all_employees) + self.page_size - 1) // self.page_size
@@ -187,7 +187,7 @@ class BaseEmployeePage(BasePage):
             result = self.safe_db_operation(self._save_operation)
             if result:
                 self.close_add_dialog(e)
-                self.refresh_table()
+                self.refresh_list()
                 self.show_snackbar(self._get_success_message())
         except ValueError as ex:
             self.show_snackbar(str(ex), True)
@@ -220,7 +220,7 @@ class BaseEmployeePage(BasePage):
             result = self.safe_db_operation(self._save_edit_operation)
             if result:
                 self.close_edit_dialog(e)
-                self.refresh_table()
+                self.refresh_list()
                 self.show_snackbar("Изменения сохранены!")
         except ValueError as ex:
             self.show_snackbar(str(ex), True)
@@ -282,7 +282,7 @@ class BaseEmployeePage(BasePage):
             result = self.safe_db_operation(operation)
             if result:
                 self.close_termination_dialog(e)
-                self.refresh_table()
+                self.refresh_list()
                 self.show_snackbar(f"{self._get_employee_type().capitalize()} уволен!")
         except ValueError as ex:
             self.show_snackbar(str(ex), True)
@@ -291,7 +291,7 @@ class BaseEmployeePage(BasePage):
         """Обработчик изменения поиска"""
         self.search_value = e.control.value.strip()
         self.current_page = 0
-        self.refresh_table()
+        self.refresh_list()
         if self.page:
             self.page.update()
     
@@ -299,14 +299,14 @@ class BaseEmployeePage(BasePage):
         """Предыдущая страница"""
         if self.current_page > 0:
             self.current_page -= 1
-            self.refresh_table()
+            self.refresh_list()
             if self.page:
                 self.page.update()
     
     def next_page(self, e):
         """Следующая страница"""
         self.current_page += 1
-        self.refresh_table()
+        self.refresh_list()
         if self.page:
             self.page.update()
     
@@ -318,7 +318,7 @@ class BaseEmployeePage(BasePage):
             self.sort_by_name = True
             self.sort_ascending = True
         self.current_page = 0
-        self.refresh_table()
+        self.refresh_list()
         if self.page:
             self.page.update()
     
@@ -330,14 +330,14 @@ class BaseEmployeePage(BasePage):
             self.sort_by_name = False
             self.sort_ascending = True
         self.current_page = 0
-        self.refresh_table()
+        self.refresh_list()
         if self.page:
             self.page.update()
     
     def on_company_filter_change(self, e):
         """Обработчик изменения фильтра по компании"""
         self.current_page = 0
-        self.refresh_table()
+        self.refresh_list()
         if self.page:
             self.page.update()
     
@@ -450,7 +450,7 @@ class BaseEmployeePage(BasePage):
     
     def render(self) -> ft.Column:
         """Возвращает интерфейс страницы"""
-        self.refresh_table()
+        self.refresh_list()
         
         # Создаем галочки для фильтрации
         if not hasattr(self, 'show_rosbezopasnost'):
@@ -470,7 +470,7 @@ class BaseEmployeePage(BasePage):
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             ft.Divider(),
             search_row,
-            self.employees_table,
+            self.employees_list,
             ft.Row([self.prev_btn, self.page_info, self.next_btn], alignment=ft.MainAxisAlignment.CENTER),
         ], spacing=10, expand=True)
     
@@ -497,8 +497,8 @@ class BaseEmployeePage(BasePage):
         pass
     
     @abstractmethod
-    def _create_table(self):
-        """Создает таблицу"""
+    def _create_list(self):
+        """Создает список"""
         pass
     
     @abstractmethod
@@ -545,8 +545,8 @@ class BaseEmployeePage(BasePage):
         pass
     
     @abstractmethod
-    def _create_table_row(self, employee):
-        """Создает строку таблицы"""
+    def _create_list_item(self, employee):
+        """Создает элемент списка"""
         pass
     
     @abstractmethod
@@ -682,9 +682,9 @@ class BaseEmployeePage(BasePage):
         
         # Определяем тип сотрудника для правильного запроса
         if hasattr(employee, 'guard_rank'):
-            cards = list(PersonalCard.select().where(PersonalCard.guard_employee == employee).order_by(PersonalCard.issue_date.desc()))
+            cards = list(PersonalCard.select().where((PersonalCard.guard_employee == employee) & (PersonalCard.is_discarded == False)).order_by(PersonalCard.issue_date.desc()))
         else:
-            cards = list(PersonalCard.select().where(PersonalCard.chief_employee == employee).order_by(PersonalCard.issue_date.desc()))
+            cards = list(PersonalCard.select().where((PersonalCard.chief_employee == employee) & (PersonalCard.is_discarded == False)).order_by(PersonalCard.issue_date.desc()))
         
         # Форма добавления
         date_field = ft.TextField(
@@ -960,21 +960,57 @@ class BaseEmployeePage(BasePage):
             self.show_snackbar("Файл не найден", True)
     
     def delete_personal_card_simple(self, card, employee, dialog_to_update=None):
-        """Упрощенное удаление личной карточки"""
-        try:
-            card.delete_instance()
-            if dialog_to_update:
-                if hasattr(dialog_to_update, 'tabs_ref'):
-                    dialog_to_update.tabs_ref.tabs[1].content = ft.Column(self._get_personal_cards_content(employee, dialog_to_update), scroll=ft.ScrollMode.AUTO)
-                    self.page.update()
-                else:
-                    dialog_to_update.content.controls.clear()
-                    new_content = self._get_personal_cards_content(employee, dialog_to_update)
-                    dialog_to_update.content.controls.extend(new_content)
-                    dialog_to_update.content.update()
-                    self.page.update()
-        except:
-            pass
+        """Показывает диалог для списания карточки"""
+        from datetime import date
+        
+        discard_date_field = ft.TextField(
+            label="Дата списания (дд.мм.гггг)",
+            value=date.today().strftime("%d.%m.%Y"),
+            width=200,
+            on_change=self.format_date_input,
+            max_length=10
+        )
+        
+        def confirm_discard(e):
+            try:
+                from datetime import datetime
+                discard_date = datetime.strptime(discard_date_field.value, "%d.%m.%Y").date()
+                card.is_discarded = True
+                card.discarded_date = discard_date
+                card.save()
+                
+                discard_dialog.open = False
+                if dialog_to_update:
+                    if hasattr(dialog_to_update, 'tabs_ref'):
+                        dialog_to_update.tabs_ref.tabs[1].content = ft.Column(self._get_personal_cards_content(employee, dialog_to_update), scroll=ft.ScrollMode.AUTO)
+                        self.page.update()
+                    else:
+                        dialog_to_update.content.controls.clear()
+                        new_content = self._get_personal_cards_content(employee, dialog_to_update)
+                        dialog_to_update.content.controls.extend(new_content)
+                        dialog_to_update.content.update()
+                        self.page.update()
+            except ValueError:
+                self.show_snackbar("Неверный формат даты!", True)
+            except Exception as ex:
+                self.show_snackbar(f"Ошибка: {ex}", True)
+        
+        discard_dialog = ft.AlertDialog(
+            title=ft.Text("Списание карточки"),
+            content=ft.Column([
+                ft.Text("Укажите дату списания:"),
+                discard_date_field
+            ], height=100),
+            actions=[
+                ft.TextButton("Списать", on_click=confirm_discard),
+                ft.TextButton("Отмена", on_click=lambda e: setattr(discard_dialog, 'open', False) or self.page.update())
+            ],
+            modal=True
+        )
+        
+        self.page.overlay.append(discard_dialog)
+        discard_dialog.open = True
+        self.page.update()
     
     def delete_document_simple(self, doc, employee, dialog_to_update=None):
         try:

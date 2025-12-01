@@ -13,6 +13,7 @@ from views.calendar import calendar_page
 from views.statistics import statistics_page
 from views.notes import notes_page
 from views.terminated import terminated_page
+from views.discarded_cards import discarded_cards_page
 from database.models import Employee
 from datetime import datetime
 from utils.photo_manager import PhotoManager
@@ -107,6 +108,9 @@ def main(page: ft.Page):
 
         elif selected_index == 9:
             content_container.content = terminated_page(page)
+
+        elif selected_index == 10:
+            content_container.content = discarded_cards_page(page)
 
         page.close(page.drawer)
         page.update()

@@ -58,5 +58,10 @@ def drawer(on_change_handler):
                 label="Уволенные сотрудники",
                 selected_icon=ft.Icons.PERSON_OFF_OUTLINED,
             ),
+            ft.NavigationDrawerDestination(
+                icon=ft.Icon(ft.Icons.CREDIT_CARD_OFF),
+                label="Списанные карточки",
+                selected_icon=ft.Icons.CREDIT_CARD_OFF_OUTLINED,
+            ),
         ],
     )
