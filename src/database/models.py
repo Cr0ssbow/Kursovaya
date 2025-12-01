@@ -30,6 +30,13 @@ class Settings(BaseModel):
     key = CharField(unique=True)
     value = CharField()
 
+class Company(BaseModel):
+    """Модель компании"""
+    name = CharField(max_length=50, unique=True, verbose_name="Название компании")
+    
+    class Meta:
+        table_name = 'companies'
+
 class GuardEmployee(BaseModel):
     @classmethod
     def exists_by_name(cls, full_name: str) -> bool:
@@ -42,13 +49,12 @@ class GuardEmployee(BaseModel):
     termination_date = DateField(null=True, verbose_name="Дата увольнения")
     termination_reason = TextField(null=True, verbose_name="Причина увольнения")
     guard_license_date = DateField(null=True, verbose_name="Дата выдачи удостоверения охранника")
-    guard_rank = IntegerField(null=True, verbose_name="Разряд охранника (3-6)")
+    guard_rank = CharField(max_length=10, null=True, verbose_name="Разряд охранника")
     medical_exam_date = DateField(null=True, verbose_name="Дата прохождения медкомиссии")
     periodic_check_date = DateField(null=True, verbose_name="Дата периодической проверки")
     hours_worked = IntegerField(verbose_name="Количество часов", default=0)
     salary = DecimalField(max_digits=10, decimal_places=2, verbose_name="Зарплата", default=0)
     payment_method = CharField(max_length=20, default="на карту", verbose_name="Способ выдачи зарплаты")
-    company = CharField(max_length=20, default="Легион", verbose_name="Компания")
     
     class Meta:
         table_name = 'guard_employees'
@@ -83,11 +89,11 @@ class ChiefEmployee(BaseModel):
     birth_date = DateField(verbose_name="Дата рождения")
     photo_path = CharField(max_length=500, null=True, verbose_name="Путь к фото")
     position = CharField(max_length=100, verbose_name="Должность")
+    guard_rank = CharField(max_length=10, null=True, verbose_name="Разряд охранника")
     termination_date = DateField(null=True, verbose_name="Дата увольнения")
     termination_reason = TextField(null=True, verbose_name="Причина увольнения")
     salary = DecimalField(max_digits=10, decimal_places=2, verbose_name="Зарплата", default=0)
     payment_method = CharField(max_length=20, default="на карту", verbose_name="Способ выдачи зарплаты")
-    company = CharField(max_length=20, default="Легион", verbose_name="Компания")
     
     class Meta:
         table_name = 'chief_employees'
@@ -108,7 +114,6 @@ class OfficeEmployee(BaseModel):
     termination_reason = TextField(null=True, verbose_name="Причина увольнения")
     salary = DecimalField(max_digits=10, decimal_places=2, verbose_name="Зарплата", default=0)
     payment_method = CharField(max_length=20, default="на карту", verbose_name="Способ выдачи зарплаты")
-    company = CharField(max_length=20, default="Легион", verbose_name="Компания")
     
     class Meta:
         table_name = 'office_employees'
@@ -122,13 +127,32 @@ Employee = GuardEmployee
 class Object(BaseModel):
     """Модель объекта"""
     name = CharField(max_length=200, unique=True, verbose_name="Название объекта")
-    address = CharField(max_length=500, null=True, verbose_name="Адрес объекта")
     description = TextField(null=True, verbose_name="Описание")
-    hourly_rate = DecimalField(max_digits=7, decimal_places=2, verbose_name="Почасовая ставка", default=0)
     created_at = DateTimeField(default=datetime.now)
 
     class Meta:
         table_name = 'objects'
+
+class ObjectAddress(BaseModel):
+    """Модель адресов объекта"""
+    object = ForeignKeyField(Object, backref='addresses', on_delete='CASCADE')
+    address = CharField(max_length=500, verbose_name="Адрес")
+    is_primary = BooleanField(default=False, verbose_name="Основной адрес")
+    created_at = DateTimeField(default=datetime.now)
+    
+    class Meta:
+        table_name = 'object_addresses'
+
+class ObjectRate(BaseModel):
+    """Модель почасовых ставок объекта"""
+    object = ForeignKeyField(Object, backref='rates', on_delete='CASCADE')
+    rate = DecimalField(max_digits=7, decimal_places=2, verbose_name="Почасовая ставка")
+    description = CharField(max_length=200, null=True, verbose_name="Описание ставки")
+    is_default = BooleanField(default=False, verbose_name="Ставка по умолчанию")
+    created_at = DateTimeField(default=datetime.now)
+    
+    class Meta:
+        table_name = 'object_rates'
 
 class Assignment(BaseModel):
     """Модель назначения сотрудника на объект"""
@@ -148,6 +172,16 @@ class Assignment(BaseModel):
     class Meta:
         table_name = 'assignments'
 
+class EmployeeCompany(BaseModel):
+    """Модель связи сотрудник-компания"""
+    guard_employee = ForeignKeyField(GuardEmployee, backref='companies', on_delete='CASCADE', null=True)
+    chief_employee = ForeignKeyField(ChiefEmployee, backref='companies', on_delete='CASCADE', null=True)
+    office_employee = ForeignKeyField(OfficeEmployee, backref='companies', on_delete='CASCADE', null=True)
+    company = ForeignKeyField(Company, backref='employees', on_delete='CASCADE')
+    
+    class Meta:
+        table_name = 'employee_companies'
+
 class ChiefObjectAssignment(BaseModel):
     """Модель назначения начальника на объект"""
     chief = ForeignKeyField(ChiefEmployee, backref='object_assignments', on_delete='CASCADE')
@@ -164,6 +198,7 @@ class PersonalCard(BaseModel):
     """Модель личной карточки"""
     guard_employee = ForeignKeyField(GuardEmployee, backref='personal_cards', on_delete='CASCADE', null=True)
     chief_employee = ForeignKeyField(ChiefEmployee, backref='personal_cards', on_delete='CASCADE', null=True)
+    company = ForeignKeyField(Company, backref='personal_cards', on_delete='CASCADE')
     issue_date = DateField(verbose_name="Дата выдачи")
     photo_path = CharField(max_length=500, null=True, verbose_name="Путь к фотографии карточки")
     created_at = DateTimeField(default=datetime.now)
@@ -188,7 +223,11 @@ def init_database():
     """Инициализация базы данных"""
     try:
         db.connect()
-        db.create_tables([GuardEmployee, ChiefEmployee, OfficeEmployee, Settings, Object, Assignment, ChiefObjectAssignment, PersonalCard, EmployeeDocument], safe=True)
+        db.create_tables([Company, GuardEmployee, ChiefEmployee, OfficeEmployee, EmployeeCompany, Settings, Object, ObjectAddress, ObjectRate, Assignment, ChiefObjectAssignment, PersonalCard, EmployeeDocument], safe=True)
+        
+        # Создаем компании по умолчанию
+        for company_name in ["Легион", "Норд", "Росбезопасность"]:
+            Company.get_or_create(name=company_name)
         
         # Миграция: добавляем столбец company если его нет
         try:
@@ -222,17 +261,107 @@ def init_database():
             db.execute_sql("ALTER TABLE personal_cards ADD COLUMN photo_path VARCHAR(500)")
         except:
             pass  # Столбец уже существует
+        
+        # Миграция: изменяем тип guard_rank на VARCHAR
+        try:
+            db.execute_sql("ALTER TABLE guard_employees ALTER COLUMN guard_rank TYPE VARCHAR(10)")
+        except:
+            pass  # Поле уже имеет нужный тип
+        
+        # Миграция: добавляем guard_rank для начальников
+        try:
+            db.execute_sql("ALTER TABLE chief_employees ADD COLUMN guard_rank VARCHAR(10)")
+        except:
+            pass  # Поле уже существует
+        
+        # Миграция: добавляем company_id для личных карточек
+        try:
+            db.execute_sql("ALTER TABLE personal_cards ADD COLUMN company_id INTEGER")
+        except:
+            pass  # Поле уже существует
+        
+        # Обновляем существующие карточки
+        try:
+            legion = Company.get(Company.name == "Легион")
+            db.execute_sql(f"UPDATE personal_cards SET company_id = {legion.id} WHERE company_id IS NULL")
+        except:
+            pass
+        
+        # Миграция: удаляем старые поля из objects
+        try:
+            db.execute_sql("ALTER TABLE objects DROP COLUMN IF EXISTS address")
+            db.execute_sql("ALTER TABLE objects DROP COLUMN IF EXISTS hourly_rate")
+        except:
+            pass
             
         # Создаем настройку темы по умолчанию
         try:
             Settings.get(Settings.key == "theme")
         except:
             Settings.create(key="theme", value="light")
+        
+        # Миграция: переносим старые данные о компаниях в новую структуру
+        migrate_company_data()
             
     except Exception as e:
         print(f"Ошибка подключения к PostgreSQL: {e}")
         print("Убедитесь, что PostgreSQL запущен и настройки подключения корректны")
         raise
+
+def migrate_company_data():
+    """Миграция старых данных о компаниях"""
+    try:
+        # Проверяем, есть ли старое поле company
+        cursor = db.execute_sql("SELECT column_name FROM information_schema.columns WHERE table_name='guard_employees' AND column_name='company'")
+        if cursor.fetchone():
+            # Мигрируем данные для GuardEmployee
+            for employee in GuardEmployee.select():
+                if hasattr(employee, 'company') and employee.company:
+                    try:
+                        company = Company.get(Company.name == employee.company)
+                        EmployeeCompany.get_or_create(guard_employee=employee, company=company)
+                    except:
+                        pass
+        
+        # Мигрируем ChiefEmployee
+        cursor = db.execute_sql("SELECT column_name FROM information_schema.columns WHERE table_name='chief_employees' AND column_name='company'")
+        if cursor.fetchone():
+            for employee in ChiefEmployee.select():
+                if hasattr(employee, 'company') and employee.company:
+                    try:
+                        company = Company.get(Company.name == employee.company)
+                        EmployeeCompany.get_or_create(chief_employee=employee, company=company)
+                    except:
+                        pass
+        
+        # Мигрируем OfficeEmployee
+        cursor = db.execute_sql("SELECT column_name FROM information_schema.columns WHERE table_name='office_employees' AND column_name='company'")
+        if cursor.fetchone():
+            for employee in OfficeEmployee.select():
+                if hasattr(employee, 'company') and employee.company:
+                    try:
+                        company = Company.get(Company.name == employee.company)
+                        EmployeeCompany.get_or_create(office_employee=employee, company=company)
+                    except:
+                        pass
+        
+        # Для сотрудников без компаний назначаем Легион
+        legion = Company.get(Company.name == "Легион")
+        
+        for employee in GuardEmployee.select():
+            if not EmployeeCompany.select().where(EmployeeCompany.guard_employee == employee).exists():
+                EmployeeCompany.create(guard_employee=employee, company=legion)
+        
+        for employee in ChiefEmployee.select():
+            if not EmployeeCompany.select().where(EmployeeCompany.chief_employee == employee).exists():
+                EmployeeCompany.create(chief_employee=employee, company=legion)
+        
+        for employee in OfficeEmployee.select():
+            if not EmployeeCompany.select().where(EmployeeCompany.office_employee == employee).exists():
+                EmployeeCompany.create(office_employee=employee, company=legion)
+                
+    except Exception as e:
+        print(f"Ошибка миграции: {e}")
 
 # Инициализируем базу данных при импорте
 if __name__ != '__main__':

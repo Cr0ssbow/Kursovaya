@@ -45,6 +45,88 @@ def load_birthday_display_from_db() -> bool:
     except DoesNotExist:
         return True  # По умолчанию включено
 
+def manage_companies_dialog(page: ft.Page):
+    """Диалог управления компаниями"""
+    from database.models import Company
+    
+    companies_list = ft.Column([], spacing=5)
+    new_company_field = ft.TextField(label="Новая компания", width=300)
+    
+    def refresh_companies():
+        companies_list.controls.clear()
+        for company in Company.select():
+            companies_list.controls.append(
+                ft.Row([
+                    ft.Text(company.name, expand=True),
+                    ft.IconButton(
+                        icon=ft.Icons.DELETE,
+                        on_click=lambda e, c=company: delete_company(c),
+                        tooltip="Удалить"
+                    )
+                ])
+            )
+        page.update()
+    
+    def add_company(e):
+        name = new_company_field.value.strip()
+        if name:
+            try:
+                Company.create(name=name)
+                new_company_field.value = ""
+                refresh_companies()
+                show_snackbar("Компания добавлена!")
+            except:
+                show_snackbar("Компания уже существует!", True)
+    
+    def delete_company(company):
+        from database.models import EmployeeCompany
+        # Проверяем, есть ли сотрудники в этой компании
+        if EmployeeCompany.select().where(EmployeeCompany.company == company).exists():
+            show_snackbar("Нельзя удалить компанию с сотрудниками!", True)
+        else:
+            company.delete_instance()
+            refresh_companies()
+            show_snackbar("Компания удалена!")
+    
+    def show_snackbar(message, is_error=False):
+        snack = ft.SnackBar(
+            content=ft.Text(message),
+            bgcolor=ft.Colors.RED if is_error else ft.Colors.GREEN
+        )
+        page.overlay.append(snack)
+        snack.open = True
+        page.update()
+    
+    dialog = ft.AlertDialog(
+        title=ft.Text("Управление компаниями"),
+        content=ft.Container(
+            content=ft.Column([
+                ft.Text("Список компаний:"),
+                ft.Container(
+                    content=companies_list,
+                    height=200,
+                    width=400
+                ),
+                ft.Divider(),
+                ft.Row([
+                    new_company_field,
+                    ft.ElevatedButton("Добавить", on_click=add_company)
+                ])
+            ]),
+            width=500,
+            height=350
+        ),
+        actions=[
+            ft.TextButton("Закрыть", on_click=lambda e: page.close(dialog))
+        ]
+    )
+    
+    refresh_companies()
+    page.overlay.append(dialog)
+    page.update()
+    dialog.open = True
+    page.update()
+
 def settings_page(page: ft.Page) -> ft.Column:
     def theme_changed(e):
         selected_theme = e.control.value
@@ -173,6 +255,13 @@ def settings_page(page: ft.Page) -> ft.Column:
                 "Импорт в Excel",
                 icon=ft.Icons.FILE_DOWNLOAD,
                 on_click=import_to_excel,
+            ),
+            ft.Divider(),
+            ft.Text("Управление компаниями"),
+            ft.ElevatedButton(
+                "Управление компаниями",
+                icon=ft.Icons.BUSINESS,
+                on_click=lambda e: manage_companies_dialog(page),
             ),
         ],
         spacing=10,

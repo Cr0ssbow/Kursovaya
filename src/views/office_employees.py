@@ -13,7 +13,7 @@ class OfficeEmployeesPage(BaseEmployeePage):
         self.position_field = ft.TextField(label="Должность", width=250)
         self.salary_field = ft.TextField(label="Зарплата", width=150)
         self.payment_method_field = ft.Dropdown(label="Способ выдачи зарплаты", width=250, options=[ft.dropdown.Option("на карту"), ft.dropdown.Option("на руки")], value="на карту")
-        self.company_field = ft.Dropdown(label="Компания", width=150, options=[ft.dropdown.Option("Легион"), ft.dropdown.Option("Норд")], value="Легион")
+        self.company_checkboxes = self._create_company_checkboxes()
     
     def _create_table(self):
         """Создает таблицу"""
@@ -40,7 +40,27 @@ class OfficeEmployeesPage(BaseEmployeePage):
         return query.where(OfficeEmployee.full_name.contains(self.search_value))
     
     def _apply_company_filter(self, query, companies):
-        return query.where(OfficeEmployee.company.in_(companies))
+        from database.models import EmployeeCompany, Company
+        company_ids = [c.id for c in Company.select().where(Company.name.in_(companies))]
+        employee_ids = [ec.office_employee_id for ec in EmployeeCompany.select().where(EmployeeCompany.company_id.in_(company_ids))]
+        return query.where(OfficeEmployee.id.in_(employee_ids))
+    
+    def _create_company_checkboxes(self, first_checked=True):
+        """Создает чекбоксы для компаний"""
+        from database.models import Company
+        checkboxes = []
+        for i, company in enumerate(Company.select()):
+            checkboxes.append(ft.Checkbox(
+                label=company.name, 
+                value=first_checked and i == 0
+            ))
+        return checkboxes
+    
+    def _get_employee_companies(self, employee):
+        """Возвращает список компаний сотрудника"""
+        from database.models import EmployeeCompany, Company
+        companies = [ec.company.name for ec in EmployeeCompany.select().join(Company).where(EmployeeCompany.office_employee == employee)]
+        return ", ".join(companies) if companies else "Не указано"
     
     def _get_order_field(self):
         return OfficeEmployee.full_name
@@ -63,7 +83,7 @@ class OfficeEmployeesPage(BaseEmployeePage):
                     ft.Text(f"Должность: {employee.position}", size=16),
                     ft.Text(f"Зарплата: {employee.salary} ₽", size=16),
                     ft.Text(f"Способ выдачи зарплаты: {employee.payment_method}", size=16),
-                    ft.Text(f"Компания: {getattr(employee, 'company', 'Легион')}", size=16),
+                    ft.Text(f"Компании: {self._get_employee_companies(employee)}", size=16),
                 ]),
                 ft.Container(expand=True)
             ])
@@ -73,7 +93,8 @@ class OfficeEmployeesPage(BaseEmployeePage):
         return "Добавить сотрудника офиса"
     
     def _get_form_fields(self):
-        return [self.name_field, self.birth_field, self.position_field, self.salary_field, self.payment_method_field, self.company_field]
+        company_row = ft.Row([ft.Text("Компании:", width=100)] + self.company_checkboxes)
+        return [self.name_field, self.birth_field, self.position_field, self.salary_field, self.payment_method_field, company_row]
     
     def _save_operation(self):
         full_name = self.name_field.value.strip()
@@ -97,9 +118,15 @@ class OfficeEmployeesPage(BaseEmployeePage):
             birth_date=birth_date,
             position=position_value,
             salary=salary,
-            payment_method=payment_method_value or "на карту",
-            company=self.company_field.value or "Легион"
+            payment_method=payment_method_value or "на карту"
         )
+        
+        # Сохраняем связи с компаниями
+        from database.models import Company, EmployeeCompany
+        for checkbox in self.company_checkboxes:
+            if checkbox.value:
+                company = Company.get(Company.name == checkbox.label)
+                EmployeeCompany.create(office_employee=employee, company=company)
         
 
         return True
@@ -120,10 +147,11 @@ class OfficeEmployeesPage(BaseEmployeePage):
         self.edit_position_field = ft.TextField(label="Должность", width=250)
         self.edit_salary_field = ft.TextField(label="Зарплата", width=150)
         self.edit_payment_method_field = ft.Dropdown(label="Способ выдачи зарплаты", width=250, options=[ft.dropdown.Option("на карту"), ft.dropdown.Option("на руки")])
-        self.edit_company_field = ft.Dropdown(label="Компания", width=150, options=[ft.dropdown.Option("Легион"), ft.dropdown.Option("Норд")])
+        self.edit_company_checkboxes = self._create_company_checkboxes(False)
     
     def _get_edit_fields(self):
-        return [self.edit_name_field, self.edit_birth_field, self.edit_position_field, self.edit_salary_field, self.edit_payment_method_field, self.edit_company_field]
+        edit_company_row = ft.Row([ft.Text("Компании:", width=100)] + self.edit_company_checkboxes)
+        return [self.edit_name_field, self.edit_birth_field, self.edit_position_field, self.edit_salary_field, self.edit_payment_method_field, edit_company_row]
     
     def _populate_edit_fields(self, employee):
         self.edit_name_field.value = employee.full_name
@@ -131,7 +159,11 @@ class OfficeEmployeesPage(BaseEmployeePage):
         self.edit_position_field.value = employee.position
         self.edit_salary_field.value = str(employee.salary)
         self.edit_payment_method_field.value = employee.payment_method
-        self.edit_company_field.value = getattr(employee, 'company', 'Легион')
+        # Заполняем чекбоксы компаний
+        from database.models import EmployeeCompany, Company
+        employee_companies = [ec.company.name for ec in EmployeeCompany.select().join(Company).where(EmployeeCompany.office_employee == employee)]
+        for checkbox in self.edit_company_checkboxes:
+            checkbox.value = checkbox.label in employee_companies
     
     def _save_edit_operation(self):
         full_name = self.edit_name_field.value.strip()
@@ -155,50 +187,67 @@ class OfficeEmployeesPage(BaseEmployeePage):
         self.current_employee.position = position_value
         self.current_employee.salary = salary
         self.current_employee.payment_method = payment_method_value or "на карту"
-        self.current_employee.company = self.edit_company_field.value or "Легион"
+        
         self.current_employee.save()
+        
+        # Обновляем связи с компаниями
+        from database.models import Company, EmployeeCompany
+        # Удаляем старые связи
+        EmployeeCompany.delete().where(EmployeeCompany.office_employee == self.current_employee).execute()
+        # Создаем новые
+        for checkbox in self.edit_company_checkboxes:
+            if checkbox.value:
+                company = Company.get(Company.name == checkbox.label)
+                EmployeeCompany.create(office_employee=self.current_employee, company=company)
         return True
     
     def _get_employee_type(self):
         return "сотрудника офиса"
     
     def show_detail_dialog(self, employee):
-        """Показывает диалог с детальной информацией"""
-        self.detail_dialog.title = ft.Text(f"{self._get_detail_title()}: {employee.full_name}")
-        self.detail_dialog.content = ft.Column(self._get_detail_content(employee), spacing=10, height=500, width=600)
-        self.detail_dialog.actions = [
-            ft.TextButton("Изменить фотографию", on_click=lambda e, emp=employee: self.change_photo(emp)),
-            ft.TextButton("Редактировать", on_click=lambda e, emp=employee: (self.close_detail_dialog(), self.show_edit_dialog(emp))),
-            ft.TextButton("Уволить", on_click=lambda e, emp=employee: (self.close_detail_dialog(), self.show_termination_dialog(emp)), style=ft.ButtonStyle(color=ft.Colors.RED)),
-            ft.TextButton("Закрыть", on_click=lambda e: self.close_detail_dialog())
-        ]
-        self.detail_dialog.open = True
-        if self.page and self.detail_dialog not in self.page.overlay:
-            self.page.overlay.append(self.detail_dialog)
-        if self.page:
-            self.page.update()
-    
-    def change_photo(self, employee):
-        """Изменение фотографии сотрудника"""
-        def on_result(e: ft.FilePickerResultEvent):
-            if e.files:
-                try:
-                    photo_path = self.photo_manager.save_photo(employee.full_name, e.files[0].path)
-                    employee.photo_path = photo_path
-                    employee.save()
-                    self.show_snackbar("Фотография обновлена!")
-                    self.close_detail_dialog()
-                except Exception as ex:
-                    self.show_snackbar(f"Ошибка сохранения фото: {ex}", True)
-        
-        file_picker = ft.FilePicker(on_result=on_result)
-        if self.page and file_picker not in self.page.overlay:
-            self.page.overlay.append(file_picker)
-            self.page.update()
-        file_picker.pick_files(
-            dialog_title="Выберите фотографию или PDF",
-            allowed_extensions=["jpg", "jpeg", "png", "bmp", "pdf"]
+        """Показывает диалог с вкладками (без личных карточек)"""
+        tabs = ft.Tabs(
+            selected_index=0,
+            tabs=[
+                ft.Tab(
+                    text="Основная информация",
+                    content=ft.Column(self._get_detail_content(employee), scroll=ft.ScrollMode.AUTO)
+                ),
+                ft.Tab(
+                    text="Документы",
+                    content=ft.Column([], scroll=ft.ScrollMode.AUTO)
+                )
+            ],
+            expand=True
         )
+        
+        tabs_dialog = ft.AlertDialog(
+            title=ft.Text(f"{self._get_detail_title()}: {employee.full_name}"),
+            content=tabs,
+            actions=[
+                ft.TextButton("Изменить фотографию", on_click=lambda e: self.change_photo(employee)),
+                ft.TextButton("Редактировать", on_click=lambda e: self.show_edit_dialog(employee)),
+                ft.TextButton("Уволить", on_click=lambda e: self.show_termination_dialog(employee), style=ft.ButtonStyle(color=ft.Colors.RED)),
+                ft.TextButton("Закрыть", on_click=lambda e: setattr(tabs_dialog, 'open', False) or self.page.update())
+            ],
+            modal=True
+        )
+        
+        tabs_dialog.tabs_ref = tabs
+        
+        def on_tab_change(e):
+            if e.control.selected_index == 1:  # Документы
+                tabs.tabs[1].content = ft.Column(self._get_documents_content(employee, tabs_dialog), scroll=ft.ScrollMode.AUTO)
+            self.page.update()
+        
+        tabs.on_change = on_tab_change
+        
+        self.page.overlay.append(tabs_dialog)
+        tabs_dialog.open = True
+        self.page.update()
+    
+    def get_employee_folder_type(self):
+        return "Сотрудники офиса"
 
 # Функция-обертка для совместимости
 def office_employees_page(page: ft.Page = None) -> ft.Column:

@@ -1,33 +1,26 @@
 import flet as ft
-from database.models import Object, db
+from database.models import Object, ObjectAddress, ObjectRate, db
 
-objects_table = None
-
-def objects_page(page: ft.Page = None) -> ft.Column:
-    sort_column = "name"
-    sort_reverse = False
+def objects_page(page: ft.Page = None):
+    search_value = ""
     current_page = 0
-    page_size = 13
-    global objects_table
+    page_size = 9
+    sort_ascending = True
+    sort_by_name = True
+    objects_list_view = ft.ListView(expand=True, spacing=10, padding=20)
 
     # Диалог и поля формы
     add_dialog = ft.AlertDialog(modal=True)
     name_field = ft.TextField(label="Название объекта", width=300)
-    address_field = ft.TextField(label="Адрес объекта", width=300)
     description_field = ft.TextField(label="Описание объекта", multiline=True, width=300)
-    hourly_rate_field = ft.TextField(label="Почасовая ставка", width=150)
 
     def show_add_dialog(e):
         name_field.value = ""
-        address_field.value = ""
         description_field.value = ""
-        hourly_rate_field.value = ""
         add_dialog.title = ft.Text("Добавить объект")
         add_dialog.content = ft.Column([
             name_field,
-            address_field,
             description_field,
-            hourly_rate_field,
         ], spacing=10)
         add_dialog.actions = [
             ft.TextButton("Сохранить", on_click=save_object),
@@ -47,39 +40,28 @@ def objects_page(page: ft.Page = None) -> ft.Column:
     def save_object(e):
         try:
             name = name_field.value.strip()
-            address = address_field.value.strip()
             description = description_field.value.strip()
-            hourly_rate_value = hourly_rate_field.value.strip().replace(",", ".")
-            hourly_rate = float(hourly_rate_value) if hourly_rate_value else 0.0
             if not name:
                 raise ValueError("Название объекта обязательно!")
-            if not hourly_rate_value:
-                raise ValueError("Почасовая ставка обязательна!")
             with db.atomic():
-                Object.create(name=name, address=address, description=description, hourly_rate=hourly_rate)
+                Object.create(name=name, description=description)
             close_add_dialog(e)
-            refresh_table()
+            refresh_list()
             if page:
                 page.update()
         except Exception as ex:
             add_dialog.content = ft.Column([
                 name_field,
-                address_field,
                 description_field,
-                hourly_rate_field,
                 ft.Text(f"Ошибка: {ex}", color=ft.Colors.RED)
             ], spacing=10)
             if page:
                 page.update()
-    
-    search_value = ""
 
     # Диалог редактирования
     edit_dialog = ft.AlertDialog(modal=True)
     edit_name = ft.TextField(label="Название объекта", width=300)
-    edit_address = ft.TextField(label="Адрес объекта", width=300)
     edit_description = ft.TextField(label="Описание объекта", multiline=True, width=300)
-    edit_hourly_rate = ft.TextField(label="Почасовая ставка", width=150)
 
     # Диалог подтверждения удаления
     confirm_delete_dialog = ft.AlertDialog(
@@ -109,22 +91,106 @@ def objects_page(page: ft.Page = None) -> ft.Column:
         obj.delete_instance()
         close_confirm_delete_dialog()
         close_edit_dialog(None)
-        refresh_table()
+        refresh_list()
         if page:
             page.update()
 
+    def get_addresses_tab(obj):
+        addresses_list = ft.Column([], spacing=5)
+        new_address_field = ft.TextField(label="Новый адрес", width=300)
+        
+        def refresh_addresses():
+            addresses_list.controls.clear()
+            for addr in obj.addresses:
+                def make_delete_handler(address):
+                    return lambda e: delete_address(address)
+                
+                addresses_list.controls.append(
+                    ft.Row([
+                        ft.Text(addr.address, expand=True),
+                        ft.Checkbox(label="Основной", value=addr.is_primary),
+                        ft.IconButton(icon=ft.Icons.DELETE, on_click=make_delete_handler(addr))
+                    ])
+                )
+            if page:
+                page.update()
+        
+        def add_address(e):
+            if new_address_field.value and new_address_field.value.strip():
+                ObjectAddress.create(object=obj, address=new_address_field.value.strip())
+                new_address_field.value = ""
+                refresh_addresses()
+        
+        def delete_address(addr):
+            addr.delete_instance()
+            refresh_addresses()
+        
+        refresh_addresses()
+        return ft.Column([
+            ft.Row([new_address_field, ft.ElevatedButton("Добавить", on_click=add_address)]),
+            ft.Container(height=10),
+            ft.Container(content=addresses_list, height=200)
+        ])
+
+    def get_rates_tab(obj):
+        rates_list = ft.Column([], spacing=5)
+        new_rate_field = ft.TextField(label="Новая ставка", width=150)
+        rate_desc_field = ft.TextField(label="Описание", width=200)
+        
+        def refresh_rates():
+            rates_list.controls.clear()
+            for rate in obj.rates:
+                def make_delete_handler(rate_obj):
+                    return lambda e: delete_rate(rate_obj)
+                
+                rates_list.controls.append(
+                    ft.Row([
+                        ft.Text(f"{rate.rate} ₽/ч", width=80),
+                        ft.Text(rate.description or "", expand=True),
+                        ft.Checkbox(label="По умолчанию", value=rate.is_default),
+                        ft.IconButton(icon=ft.Icons.DELETE, on_click=make_delete_handler(rate))
+                    ])
+                )
+            if page:
+                page.update()
+        
+        def add_rate(e):
+            if new_rate_field.value and new_rate_field.value.strip():
+                try:
+                    rate_value = float(new_rate_field.value.strip().replace(",", "."))
+                    ObjectRate.create(object=obj, rate=rate_value, description=rate_desc_field.value.strip() if rate_desc_field.value else None)
+                    new_rate_field.value = ""
+                    rate_desc_field.value = ""
+                    refresh_rates()
+                except ValueError:
+                    pass
+        
+        def delete_rate(rate):
+            rate.delete_instance()
+            refresh_rates()
+        
+        refresh_rates()
+        return ft.Column([
+            ft.Row([new_rate_field, rate_desc_field, ft.ElevatedButton("Добавить", on_click=add_rate)]),
+            ft.Container(height=10),
+            ft.Container(content=rates_list, height=200)
+        ])
+
     def show_edit_dialog(obj):
         edit_name.value = obj.name
-        edit_address.value = obj.address
-        edit_description.value = obj.description
-        edit_hourly_rate.value = str(obj.hourly_rate)
+        edit_description.value = obj.description or ""
+        
+        # Создаем вкладки
+        tabs = ft.Tabs(
+            tabs=[
+                ft.Tab(text="Основное", content=ft.Column([ft.Container(height=10), edit_name, edit_description], spacing=10)),
+                ft.Tab(text="Адреса", content=get_addresses_tab(obj)),
+                ft.Tab(text="Ставки", content=get_rates_tab(obj))
+            ]
+        )
+        
         edit_dialog.title = ft.Text("Редактировать объект")
-        edit_dialog.content = ft.Column([
-            edit_name,
-            edit_address,
-            edit_description,
-            edit_hourly_rate,
-        ], spacing=10)
+        edit_dialog.content = ft.Container(content=tabs, width=500, height=400)
         edit_dialog.actions = [
             ft.TextButton("Сохранить", on_click=lambda e, object_id=obj.id: save_edit_object(object_id)),
             ft.TextButton("Удалить", on_click=lambda e, obj_to_delete=obj: show_confirm_delete_dialog(obj_to_delete), style=ft.ButtonStyle(color=ft.Colors.RED)),
@@ -144,92 +210,89 @@ def objects_page(page: ft.Page = None) -> ft.Column:
     def save_edit_object(object_id):
         try:
             new_name = edit_name.value.strip()
-            new_address = edit_address.value.strip()
             new_description = edit_description.value.strip()
-            new_hourly_rate_value = edit_hourly_rate.value.strip().replace(",", ".")
-            new_hourly_rate = float(new_hourly_rate_value) if new_hourly_rate_value else 0.0
             if not new_name:
                 raise ValueError("Название объекта обязательно!")
-            if not new_hourly_rate_value:
-                raise ValueError("Почасовая ставка обязательна!")
             with db.atomic():
                 object_to_update = Object.get_by_id(object_id)
                 object_to_update.name = new_name
-                object_to_update.address = new_address
                 object_to_update.description = new_description
-                object_to_update.hourly_rate = new_hourly_rate
                 object_to_update.save()
             close_edit_dialog(None)
-            refresh_table()
+            refresh_list()
             if page:
                 page.update()
         except Exception as ex:
-            edit_dialog.content = ft.Column([
-                edit_name,
-                edit_address,
-                edit_description,
-                edit_hourly_rate,
-                ft.Text(f"Ошибка: {ex}", color=ft.Colors.RED)
-            ], spacing=10)
-            if page:
-                page.update()
+            pass
 
-    def refresh_table():
-        """Обновляет данные в таблице с учетом поиска и пагинации"""
+    def refresh_list():
+        """Обновляет список объектов"""
         if search_value:
-            objects_list = list(Object.select().where(Object.name.contains(search_value)).order_by(Object.name))
+            all_objects = list(Object.select().where(Object.name.contains(search_value)))
         else:
-            objects_list = list(Object.select().order_by(Object.name))
+            all_objects = list(Object.select())
         
-        def key(obj):
-            if sort_column == "name":
-                return obj.name
-            return obj.name
-        objects_list.sort(key=key, reverse=sort_reverse)
+        # Сортируем в Python
+        if sort_by_name:
+            all_objects.sort(key=lambda x: x.name.lower(), reverse=not sort_ascending)
+        else:
+            # Сортируем по минимальной ставке
+            def get_min_rate(obj):
+                rates = list(obj.rates)
+                return min([float(r.rate) for r in rates]) if rates else 0
+            all_objects.sort(key=get_min_rate, reverse=not sort_ascending)
         
         # Пагинация
-        start_idx = current_page * page_size
-        end_idx = start_idx + page_size
-        page_objects = objects_list[start_idx:end_idx]
+        start = current_page * page_size
+        end = start + page_size
+        objects_list = all_objects[start:end]
         
-        objects_table.rows.clear()
-        for obj in page_objects:
-            objects_table.rows.append(
-                ft.DataRow(
-                    cells=[
-                        ft.DataCell(ft.Text(obj.name), on_tap=lambda e, object_data=obj: show_edit_dialog(object_data)),
-                        ft.DataCell(ft.Text(obj.address)),
-                        ft.DataCell(ft.Text(f"{float(obj.hourly_rate):.2f} ₽")),
-                        ft.DataCell(ft.Text(obj.description)),
-                    ]
+        objects_list_view.controls.clear()
+        for obj in objects_list:
+            objects_list_view.controls.append(
+                ft.Container(
+                    content=ft.ListTile(
+                        leading=ft.Icon(ft.Icons.BUSINESS),
+                        title=ft.Text(obj.name, weight="bold"),
+                        subtitle=ft.Text(get_object_info(obj)),
+                        trailing=ft.IconButton(
+                            icon=ft.Icons.EDIT,
+                            on_click=lambda e, object_data=obj: show_edit_dialog(object_data)
+                        ),
+                        on_click=lambda e, object_data=obj: show_edit_dialog(object_data)
+                    ),
+                    margin=ft.margin.only(left=-30)
                 )
             )
         
-        # Обновляем кнопки пагинации
-        total_pages = (len(objects_list) + page_size - 1) // page_size
-        prev_btn.disabled = current_page == 0
-        next_btn.disabled = current_page >= total_pages - 1
-        page_info.value = f"Страница {current_page + 1} из {max(1, total_pages)}"
-        
         if page:
             page.update()
 
-    def on_sort(col):
-        nonlocal sort_column, sort_reverse
-        if sort_column == col:
-            sort_reverse = not sort_reverse
+    def get_object_info(obj):
+        addresses = list(obj.addresses)
+        rates = list(obj.rates)
+        
+        addr_text = addresses[0].address if addresses else "Нет адресов"
+        if len(addresses) > 1:
+            addr_text += f" (+{len(addresses)-1})"
+        
+        if rates:
+            min_rate = min([float(r.rate) for r in rates])
+            max_rate = max([float(r.rate) for r in rates])
+            if min_rate == max_rate:
+                rate_text = f"{min_rate:.2f} ₽/ч"
+            else:
+                rate_text = f"{min_rate:.2f}-{max_rate:.2f} ₽/ч"
         else:
-            sort_column = col
-            sort_reverse = False
-        refresh_table()
-        if page:
-            page.update()
+            rate_text = "Нет ставок"
+        
+        return f"{addr_text} • {rate_text}"
 
     def on_search_change(e):
         nonlocal search_value, current_page
         search_value = e.control.value.strip()
-        current_page = 0  # Сброс на первую страницу при поиске
-        refresh_table()
+        current_page = 0
+        refresh_list()
         if page:
             page.update()
     
@@ -237,41 +300,42 @@ def objects_page(page: ft.Page = None) -> ft.Column:
         nonlocal current_page
         if current_page > 0:
             current_page -= 1
-            refresh_table()
+            refresh_list()
             if page:
                 page.update()
     
     def next_page(e):
         nonlocal current_page
         current_page += 1
-        refresh_table()
+        refresh_list()
         if page:
             page.update()
     
-    # Элементы пагинации
-    prev_btn = ft.IconButton(icon=ft.Icons.ARROW_BACK, on_click=prev_page)
-    next_btn = ft.IconButton(icon=ft.Icons.ARROW_FORWARD, on_click=next_page)
-    page_info = ft.Text("Страница 1 из 1")
+    def sort_by_name_click(e):
+        nonlocal sort_by_name, sort_ascending, current_page
+        if sort_by_name:
+            sort_ascending = not sort_ascending
+        else:
+            sort_by_name = True
+            sort_ascending = True
+        current_page = 0
+        refresh_list()
+        if page:
+            page.update()
     
-    # Создаем DataTable
-    objects_table = ft.DataTable(
-        columns=[
-            ft.DataColumn(ft.Text("Название объекта", width=200), on_sort=lambda _: on_sort("name")),
-            ft.DataColumn(ft.Text("Адрес объекта", width=250)),
-            ft.DataColumn(ft.Text("Почасовая ставка", width=150)),
-            ft.DataColumn(ft.Text("Описание", width=300)),
-        ],
-        rows=[],
-        horizontal_lines=ft.border.BorderSide(1, ft.Colors.OUTLINE),
-        vertical_lines=ft.border.BorderSide(1, ft.Colors.OUTLINE),
-        heading_row_height=70,
-        data_row_min_height=50,
-        data_row_max_height=50,
-        column_spacing=10,
-        width=4000,
-        height=707
-    )
-    refresh_table()
+    def sort_by_rate_click(e):
+        nonlocal sort_by_name, sort_ascending, current_page
+        if not sort_by_name:
+            sort_ascending = not sort_ascending
+        else:
+            sort_by_name = False
+            sort_ascending = True
+        current_page = 0
+        refresh_list()
+        if page:
+            page.update()
+    
+    refresh_list()
     
     return ft.Column(
         [
@@ -295,20 +359,28 @@ def objects_page(page: ft.Page = None) -> ft.Column:
                     autofocus=False,
                     dense=True,
                 ),
+                ft.IconButton(
+                    icon=ft.Icons.ARROW_UPWARD if (sort_by_name and sort_ascending) else ft.Icons.ARROW_DOWNWARD if sort_by_name else ft.Icons.ABC,
+                    tooltip=f"По названию {'↑' if sort_ascending else '↓'}" if sort_by_name else "Сортировка по названию",
+                    on_click=sort_by_name_click
+                ),
+                ft.IconButton(
+                    icon=ft.Icons.ARROW_UPWARD if (not sort_by_name and sort_ascending) else ft.Icons.ARROW_DOWNWARD if not sort_by_name else ft.Icons.ATTACH_MONEY,
+                    tooltip=f"По мин. ставке {'↑' if sort_ascending else '↓'}" if not sort_by_name else "Сортировка по мин. ставке",
+                    on_click=sort_by_rate_click
+                ),
             ], alignment=ft.MainAxisAlignment.START),
-            ft.Container(
-                content=ft.Column([
-                    objects_table
-                ], scroll=ft.ScrollMode.AUTO),
-                border=ft.border.all(1, ft.Colors.OUTLINE),
-                border_radius=10,
-                padding=10,
-                expand=True,
-            ),
+            objects_list_view,
             ft.Row([
-                prev_btn,
-                page_info,
-                next_btn,
+                ft.IconButton(
+                    icon=ft.Icons.ARROW_BACK,
+                    on_click=prev_page
+                ),
+                ft.Text(f"Страница {current_page + 1}"),
+                ft.IconButton(
+                    icon=ft.Icons.ARROW_FORWARD,
+                    on_click=next_page
+                ),
             ], alignment=ft.MainAxisAlignment.CENTER),
         ],
         spacing=10,

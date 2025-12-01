@@ -92,8 +92,14 @@ class CalendarPage(BasePage):
         self.chief_display = ft.Text("Начальник: не назначен", size=16)
         self.selected_chief_id = None
         self.hours_dropdown = ft.Dropdown(label="Количество часов", options=[ft.dropdown.Option("12"), ft.dropdown.Option("24")], value="12", width=200)
-        self.hourly_rate_display = ft.Text("Почасовая ставка: не выбрано", size=16)
-        self.address_display = ft.Text("Адрес: не выбрано", size=16)
+        
+        # Новые поля для выбора адреса и ставки
+        self.address_dropdown = ft.Dropdown(label="Выберите адрес", width=400, visible=False)
+        self.rate_dropdown = ft.Dropdown(label="Выберите ставку", width=300, visible=False)
+        self.selected_object = None
+        self.selected_address_id = None
+        self.selected_rate_id = None
+        
         self.load_chiefs()
     
     def close_shifts_dialog(self):
@@ -225,9 +231,23 @@ class CalendarPage(BasePage):
         
         if assignments:
             for assignment in assignments:
+                # Получаем адрес объекта
+                def get_object_address(obj):
+                    from database.models import ObjectAddress
+                    primary_addr = ObjectAddress.select().where(
+                        (ObjectAddress.object == obj) & (ObjectAddress.is_primary == True)
+                    ).first()
+                    if primary_addr:
+                        return primary_addr.address
+                    first_addr = ObjectAddress.select().where(ObjectAddress.object == obj).first()
+                    return first_addr.address if first_addr else "не указан"
+                
+                object_address = self.safe_db_operation(lambda: get_object_address(assignment.object)) or "не указан"
+                
                 description_lines = [
                     ft.Text(f"Сотрудник: {assignment.employee.full_name}", weight="bold"),
                     ft.Text(f"Объект: {assignment.object.name}"),
+                    ft.Text(f"Адрес: {object_address}"),
                     ft.Text(f"Начальник: {assignment.chief.full_name if assignment.chief else 'Не назначен'}"),
                     ft.Text(f"Часы: {assignment.hours}"),
                     ft.Text(f"Ставка: {assignment.hourly_rate} ₽/час")
@@ -455,14 +475,81 @@ class CalendarPage(BasePage):
     def select_object(self, obj):
         self.object_search.value = obj.name
         self.object_search_results.visible = False
-        self.hourly_rate_display.value = f"Почасовая ставка: {float(obj.hourly_rate):.2f} ₽"
-        self.address_display.value = f"Адрес: {obj.address or 'не указан'}"
+        self.selected_object = obj
+        self.load_object_addresses(obj)
+        self.load_object_rates(obj)
         self.auto_assign_chief(obj)
         self.page.update()
     
     def load_chiefs(self):
         """Загружает список начальников"""
         pass  # Не нужно, так как начальник назначается автоматически
+    
+    def load_object_addresses(self, obj):
+        """Загружает адреса объекта"""
+        def operation():
+            from database.models import ObjectAddress
+            return list(ObjectAddress.select().where(ObjectAddress.object == obj))
+        
+        addresses = self.safe_db_operation(operation) or []
+        
+        self.address_dropdown.options.clear()
+        if addresses:
+            for addr in addresses:
+                label = addr.address
+                if addr.is_primary:
+                    label += " (основной)"
+                self.address_dropdown.options.append(
+                    ft.dropdown.Option(key=str(addr.id), text=label)
+                )
+            # Выбираем основной адрес по умолчанию
+            primary_addr = next((addr for addr in addresses if addr.is_primary), addresses[0] if addresses else None)
+            if primary_addr:
+                self.address_dropdown.value = str(primary_addr.id)
+                self.selected_address_id = primary_addr.id
+            self.address_dropdown.on_change = lambda e: self.on_address_change(e.control.value)
+            self.address_dropdown.visible = True
+        else:
+            self.address_dropdown.visible = False
+    
+    def load_object_rates(self, obj):
+        """Загружает ставки объекта"""
+        def operation():
+            from database.models import ObjectRate
+            return list(ObjectRate.select().where(ObjectRate.object == obj))
+        
+        rates = self.safe_db_operation(operation) or []
+        
+        self.rate_dropdown.options.clear()
+        if rates:
+            for rate in rates:
+                label = f"{rate.rate} ₽/ч"
+                if rate.description:
+                    label += f" - {rate.description}"
+                if rate.is_default:
+                    label += " (по умолчанию)"
+                self.rate_dropdown.options.append(
+                    ft.dropdown.Option(key=str(rate.id), text=label)
+                )
+            # Выбираем ставку по умолчанию
+            default_rate = next((rate for rate in rates if rate.is_default), rates[0] if rates else None)
+            if default_rate:
+                self.rate_dropdown.value = str(default_rate.id)
+                self.selected_rate_id = default_rate.id
+            self.rate_dropdown.visible = True
+            self.rate_dropdown.on_change = lambda e: self.on_rate_change(e.control.value)
+        else:
+            self.rate_dropdown.visible = False
+    
+    def on_address_change(self, address_id):
+        """Обработчик смены адреса"""
+        if address_id:
+            self.selected_address_id = int(address_id)
+    
+    def on_rate_change(self, rate_id):
+        """Обработчик смены ставки"""
+        if rate_id:
+            self.selected_rate_id = int(rate_id)
     
     def auto_assign_chief(self, obj):
         """Автоматически назначает начальника на основе объекта"""
@@ -485,11 +572,14 @@ class CalendarPage(BasePage):
         self.employee_search.value = ""
         self.object_search.value = ""
         self.selected_chief_id = None
+        self.selected_object = None
+        self.selected_address_id = None
+        self.selected_rate_id = None
         self.hours_dropdown.value = "12"
         self.search_results.visible = False
         self.object_search_results.visible = False
-        self.hourly_rate_display.value = "Почасовая ставка: не выбрано"
-        self.address_display.value = "Адрес: не выбрано"
+        self.address_dropdown.visible = False
+        self.rate_dropdown.visible = False
         self.chief_display.value = "Начальник: не назначен"
         
         self.add_shift_dialog.content.controls = [
@@ -498,19 +588,21 @@ class CalendarPage(BasePage):
             self.search_results,
             self.object_search,
             self.object_search_results,
+            self.address_dropdown,
+            self.rate_dropdown,
             self.chief_display,
-            self.hours_dropdown,
-            self.address_display,
-            self.hourly_rate_display
+            self.hours_dropdown
         ]
     
     def save_new_shift(self):
-        if not self.employee_search.value or not self.object_search.value or not self.hours_dropdown.value:
+        if not self.employee_search.value or not self.object_search.value or not self.hours_dropdown.value or not self.selected_rate_id:
             return
         
         def operation():
+            from database.models import ObjectRate
             employee = Employee.get(Employee.full_name == self.employee_search.value)
             obj = Object.get(Object.name == self.object_search.value)
+            rate = ObjectRate.get_by_id(self.selected_rate_id)
             
             chief = None
             if self.selected_chief_id:
@@ -522,10 +614,10 @@ class CalendarPage(BasePage):
                 chief=chief,
                 date=self.current_shift_date,
                 hours=int(self.hours_dropdown.value),
-                hourly_rate=obj.hourly_rate
+                hourly_rate=rate.rate
             )
             
-            salary_increase = float(obj.hourly_rate) * int(self.hours_dropdown.value)
+            salary_increase = float(rate.rate) * int(self.hours_dropdown.value)
             new_salary = float(employee.salary) + salary_increase
             new_hours = employee.hours_worked + int(self.hours_dropdown.value)
             

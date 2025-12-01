@@ -12,9 +12,10 @@ class ChiefEmployeesPage(BaseEmployeePage):
         self.name_field = ft.TextField(label="ФИО", width=300)
         self.birth_field = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=180, on_change=self.format_date_input, max_length=10)
         self.position_field = ft.TextField(label="Должность", width=250)
+        self.guard_rank_field = ft.Dropdown(label="Разряд охранника", width=180, options=[ft.dropdown.Option("ОВН"), ft.dropdown.Option("Б")] + [ft.dropdown.Option(str(i)) for i in range(4, 7)])
         self.salary_field = ft.TextField(label="Зарплата", width=150)
         self.payment_method_field = ft.Dropdown(label="Способ выдачи зарплаты", width=250, options=[ft.dropdown.Option("на карту"), ft.dropdown.Option("на руки")], value="на карту")
-        self.company_field = ft.Dropdown(label="Компания", width=150, options=[ft.dropdown.Option("Легион"), ft.dropdown.Option("Норд")], value="Легион")
+        self.company_checkboxes = self._create_company_checkboxes()
     
     def _create_table(self):
         """Создает таблицу"""
@@ -41,7 +42,27 @@ class ChiefEmployeesPage(BaseEmployeePage):
         return query.where(ChiefEmployee.full_name.contains(self.search_value))
     
     def _apply_company_filter(self, query, companies):
-        return query.where(ChiefEmployee.company.in_(companies))
+        from database.models import EmployeeCompany, Company
+        company_ids = [c.id for c in Company.select().where(Company.name.in_(companies))]
+        employee_ids = [ec.chief_employee_id for ec in EmployeeCompany.select().where(EmployeeCompany.company_id.in_(company_ids))]
+        return query.where(ChiefEmployee.id.in_(employee_ids))
+    
+    def _create_company_checkboxes(self, first_checked=True):
+        """Создает чекбоксы для компаний"""
+        from database.models import Company
+        checkboxes = []
+        for i, company in enumerate(Company.select()):
+            checkboxes.append(ft.Checkbox(
+                label=company.name, 
+                value=first_checked and i == 0
+            ))
+        return checkboxes
+    
+    def _get_employee_companies(self, employee):
+        """Возвращает список компаний сотрудника"""
+        from database.models import EmployeeCompany, Company
+        companies = [ec.company.name for ec in EmployeeCompany.select().join(Company).where(EmployeeCompany.chief_employee == employee)]
+        return ", ".join(companies) if companies else "Не указано"
     
     def _get_order_field(self):
         return ChiefEmployee.full_name
@@ -55,333 +76,64 @@ class ChiefEmployeesPage(BaseEmployeePage):
     def _get_detail_title(self):
         return "Карточка начальника"
     
-    def _get_detail_pages(self, employee):
-        """Возвращает список страниц для диалога"""
-        return [
-            {
-                'title': 'Основная информация',
-                'content': self._get_detail_content(employee)
-            },
-            {
-                'title': 'Личные карточки',
-                'content': self._get_personal_cards_content(employee)
-            }
-        ]
-    
-    def _get_personal_cards_content(self, employee, dialog_ref=None):
-        """Возвращает содержимое страницы личных карточек"""
-        from database.models import PersonalCard
-        from datetime import date
-        
-        cards = list(PersonalCard.select().where(PersonalCard.chief_employee == employee).order_by(PersonalCard.issue_date.desc()))
-        
-        # Форма добавления
-        date_field = ft.TextField(
-            label="Дата (дд.мм.гггг)",
-            value=date.today().strftime("%d.%m.%Y"),
-            width=150,
-            on_change=self.format_date_input,
-            max_length=10
-        )
-        
-        selected_file_path = [None]
-        file_button = ft.ElevatedButton("Выбрать файл", width=120)
-        
-        def on_file_result(e: ft.FilePickerResultEvent):
-            if e.files:
-                selected_file_path[0] = e.files[0].path
-                file_button.text = f"Файл: {e.files[0].name[:10]}..."
-                self.page.update()
-        
-        def select_file(e):
-            file_picker = ft.FilePicker(on_result=on_file_result)
-            self.page.overlay.append(file_picker)
-            self.page.update()
-            file_picker.pick_files(
-                dialog_title="Выберите фото карточки",
-                allowed_extensions=["jpg", "jpeg", "png", "pdf"]
-            )
-        
-        def save_card(e):
-            try:
-                if not selected_file_path[0]:
-                    self.show_snackbar("Выберите файл!", True)
-                    return
-                
-                from datetime import datetime
-                date_value = date_field.value.strip()
-                if not date_value:
-                    self.show_snackbar("Дата обязательна!", True)
-                    return
-                
-                issue_date = datetime.strptime(date_value, "%d.%m.%Y").date()
-                saved_path = self.save_personal_card(employee, selected_file_path[0])
-                
-                card = PersonalCard.select().where(
-                    PersonalCard.chief_employee == employee,
-                    PersonalCard.photo_path == saved_path
-                ).order_by(PersonalCard.created_at.desc()).first()
-                
-                if card:
-                    card.issue_date = issue_date
-                    card.save()
-                
-                # Очищаем форму
-                date_field.value = date.today().strftime("%d.%m.%Y")
-                selected_file_path[0] = None
-                file_button.text = "Выбрать файл"
-                
-                if dialog_ref:
-                    dialog_ref.content.controls.clear()
-                    new_content = self._get_personal_cards_content(employee, dialog_ref)
-                    dialog_ref.content.controls.extend(new_content)
-                    dialog_ref.content.update()
-                    self.page.update()
-            except Exception as ex:
-                self.show_snackbar(f"Ошибка: {ex}", True)
-        
-        file_button.on_click = select_file
-        
-        add_form = ft.Column([
-            ft.Text("Добавить карточку", weight="bold"),
-            ft.Row([date_field, file_button, ft.ElevatedButton("Сохранить", on_click=save_card, width=100)], spacing=10)
-        ], spacing=5)
-        
-        cards_list = []
-        if cards:
-            for i, card in enumerate(cards):
-                def make_view_handler(card_to_view):
-                    return lambda e: self.view_personal_card(card_to_view)
-                
-                def make_delete_handler(card_to_delete):
-                    return lambda e: self.delete_personal_card_simple(card_to_delete, employee, dialog_ref)
-                
-                cards_list.append(
-                    ft.ListTile(
-                        title=ft.Text(f"Карточка #{i+1}"),
-                        subtitle=ft.Text(f"Дата: {self.format_date(card.issue_date)}"),
-                        trailing=ft.Row([
-                            ft.IconButton(ft.Icons.VISIBILITY, on_click=make_view_handler(card)),
-                            ft.IconButton(ft.Icons.DELETE, on_click=make_delete_handler(card))
-                        ], tight=True)
-                    )
+    def show_detail_dialog(self, employee):
+        """Показывает диалог с вкладками"""
+        tabs = ft.Tabs(
+            selected_index=0,
+            tabs=[
+                ft.Tab(
+                    text="Основная информация",
+                    content=ft.Column(self._get_detail_content(employee), scroll=ft.ScrollMode.AUTO)
+                ),
+                ft.Tab(
+                    text="Личные карточки",
+                    content=ft.Column([], scroll=ft.ScrollMode.AUTO)
+                ),
+                ft.Tab(
+                    text="Документы",
+                    content=ft.Column([], scroll=ft.ScrollMode.AUTO)
                 )
-        else:
-            cards_list.append(ft.Text("Нет карточек", size=16, color=ft.Colors.GREY))
-        
-        return [
-            ft.Text("Личные карточки", size=20, weight="bold"),
-            add_form,
-            ft.Column(cards_list, spacing=5, scroll=ft.ScrollMode.AUTO, height=450)
-        ]
-    
-    def add_personal_card_simple(self, employee, dialog_to_update=None):
-        def on_result(e: ft.FilePickerResultEvent):
-            if e.files:
-                self.show_card_date_dialog(employee, e.files[0].path, dialog_to_update)
-        
-        file_picker = ft.FilePicker(on_result=on_result)
-        self.page.overlay.append(file_picker)
-        self.page.update()
-        file_picker.pick_files(
-            dialog_title="Выберите фото карточки",
-            allowed_extensions=["jpg", "jpeg", "png", "pdf"]
-        )
-    
-    def show_card_date_dialog(self, employee, file_path, dialog_to_update=None):
-        from datetime import date
-        
-        date_field = ft.TextField(
-            label="Дата выдачи (дд.мм.гггг)",
-            value=date.today().strftime("%d.%m.%Y"),
-            width=200,
-            on_change=self.format_date_input,
-            max_length=10
+            ],
+            expand=True
         )
         
-        def save_card(e):
-            try:
-                from database.models import PersonalCard
-                from datetime import datetime
-                
-                date_value = date_field.value.strip()
-                if not date_value:
-                    raise ValueError("Дата выдачи обязательна!")
-                
-                issue_date = datetime.strptime(date_value, "%d.%m.%Y").date()
-                saved_path = self.save_personal_card(employee, file_path)
-                
-                # Обновляем дату в базе
-                card = PersonalCard.select().where(
-                    PersonalCard.chief_employee == employee,
-                    PersonalCard.photo_path == saved_path
-                ).order_by(PersonalCard.created_at.desc()).first()
-                
-                if card:
-                    card.issue_date = issue_date
-                    card.save()
-                
-                date_dialog.open = False
-                self.page.update()
-                if dialog_to_update:
-                    dialog_to_update.content.controls.clear()
-                    new_content = self._get_personal_cards_content(employee, dialog_to_update)
-                    dialog_to_update.content.controls.extend(new_content)
-                    dialog_to_update.content.update()
-                    self.page.update()
-            except Exception as ex:
-                self.show_snackbar(f"Ошибка: {ex}", True)
-        
-        date_dialog = ft.AlertDialog(
-            title=ft.Text("Дата выдачи карточки"),
-            content=date_field,
+        tabs_dialog = ft.AlertDialog(
+            title=ft.Text(f"{self._get_detail_title()}: {employee.full_name}"),
+            content=tabs,
             actions=[
-                ft.TextButton("Сохранить", on_click=save_card),
-                ft.TextButton("Отмена", on_click=lambda e: setattr(date_dialog, 'open', False) or self.page.update())
+                ft.TextButton("Изменить фотографию", on_click=lambda e: self.change_photo(employee)),
+                ft.TextButton("Управление объектами", on_click=lambda e: self.show_objects_dialog(employee)),
+                ft.TextButton("Редактировать", on_click=lambda e: self.show_edit_dialog(employee)),
+                ft.TextButton("Уволить", on_click=lambda e: self.show_termination_dialog(employee), style=ft.ButtonStyle(color=ft.Colors.RED)),
+                ft.TextButton("Закрыть", on_click=lambda e: setattr(tabs_dialog, 'open', False) or self.page.update())
             ],
             modal=True
         )
         
-        self.page.overlay.append(date_dialog)
-        date_dialog.open = True
+        # Сохраняем ссылку на tabs в диалоге
+        tabs_dialog.tabs_ref = tabs
+        
+        def on_tab_change(e):
+            if e.control.selected_index == 1:  # Карточки
+                tabs.tabs[1].content = ft.Column(self._get_personal_cards_content(employee, tabs_dialog), scroll=ft.ScrollMode.AUTO)
+            elif e.control.selected_index == 2:  # Документы
+                tabs.tabs[2].content = ft.Column(self._get_documents_content(employee, tabs_dialog), scroll=ft.ScrollMode.AUTO)
+            self.page.update()
+        
+        tabs.on_change = on_tab_change
+        
+        self.page.overlay.append(tabs_dialog)
+        tabs_dialog.open = True
         self.page.update()
     
-    def delete_personal_card_simple(self, card, employee, dialog_to_update=None):
-        try:
-            card.delete_instance()
-            if dialog_to_update:
-                dialog_to_update.content.controls.clear()
-                new_content = self._get_personal_cards_content(employee, dialog_to_update)
-                dialog_to_update.content.controls.extend(new_content)
-                dialog_to_update.content.update()
-                self.page.update()
-        except:
-            pass
+
     
-    def view_personal_card(self, card):
-        if card.photo_path and os.path.exists(card.photo_path):
-            self.open_pdf(card.photo_path)
-        else:
-            self.show_snackbar("Файл не найден", True)
+
     
     def get_employee_folder_type(self):
         return "Начальник охраны"
     
-    def _get_documents_content(self, employee, dialog_ref=None):
-        from database.models import EmployeeDocument
-        
-        docs = list(EmployeeDocument.select().where(EmployeeDocument.chief_employee == employee).order_by(EmployeeDocument.created_at.desc()))
-        
-        doc_name_field = ft.TextField(label="Название документа", width=200)
-        selected_file_path = [None]
-        file_button = ft.ElevatedButton("Выбрать файл", width=120)
-        
-        def on_file_result(e: ft.FilePickerResultEvent):
-            if e.files:
-                selected_file_path[0] = e.files[0].path
-                file_button.text = f"Файл: {e.files[0].name[:10]}..."
-                self.page.update()
-        
-        def select_file(e):
-            file_picker = ft.FilePicker(on_result=on_file_result)
-            self.page.overlay.append(file_picker)
-            self.page.update()
-            file_picker.pick_files(dialog_title="Выберите документ", allowed_extensions=["jpg", "jpeg", "png", "pdf"])
-        
-        def save_document(e):
-            try:
-                if not selected_file_path[0] or not doc_name_field.value.strip():
-                    self.show_snackbar("Заполните все поля!", True)
-                    return
-                
-                self.save_document(employee, selected_file_path[0], doc_name_field.value.strip())
-                doc_name_field.value = ""
-                selected_file_path[0] = None
-                file_button.text = "Выбрать файл"
-                
-                if hasattr(dialog_ref, 'tabs'):
-                    dialog_ref.tabs[2].content = ft.Column(self._get_documents_content(employee, dialog_ref), scroll=ft.ScrollMode.AUTO)
-                    self.page.update()
-            except Exception as ex:
-                self.show_snackbar(f"Ошибка: {ex}", True)
-        
-        file_button.on_click = select_file
-        
-        add_form = ft.Column([
-            ft.Text("Добавить документ", weight="bold"),
-            ft.Row([doc_name_field, file_button, ft.ElevatedButton("Сохранить", on_click=save_document, width=100)], spacing=10)
-        ], spacing=5)
-        
-        docs_list = []
-        if docs:
-            for doc in docs:
-                def make_view_handler(doc_to_view):
-                    return lambda e: self.view_document(doc_to_view)
-                
-                def make_delete_handler(doc_to_delete):
-                    return lambda e: self.delete_document_simple(doc_to_delete, employee, dialog_ref)
-                
-                docs_list.append(
-                    ft.ListTile(
-                        title=ft.Text(doc.document_type),
-                        subtitle=ft.Text(f"Добавлен: {doc.created_at.strftime('%d.%m.%Y')}"),
-                        trailing=ft.Row([
-                            ft.IconButton(ft.Icons.VISIBILITY, on_click=make_view_handler(doc)),
-                            ft.IconButton(ft.Icons.DELETE, on_click=make_delete_handler(doc))
-                        ], tight=True)
-                    )
-                )
-        else:
-            docs_list.append(ft.Text("Нет документов", size=16, color=ft.Colors.GREY))
-        
-        return [
-            ft.Text("Документы", size=20, weight="bold"),
-            add_form,
-            ft.Column(docs_list, spacing=5, scroll=ft.ScrollMode.AUTO, height=450)
-        ]
-    
-    def save_document(self, employee, file_path, doc_name):
-        from database.models import EmployeeDocument
-        import shutil
-        from pathlib import Path
-        from PIL import Image
-        
-        safe_name = "".join(c for c in employee.full_name if c.isalnum() or c in (' ', '-', '_')).strip().replace(' ', '_')
-        docs_folder = Path(f"storage/data/Начальник охраны/{safe_name}/документы")
-        docs_folder.mkdir(parents=True, exist_ok=True)
-        
-        source_file = Path(file_path)
-        doc_count = EmployeeDocument.select().where(EmployeeDocument.chief_employee == employee).count() + 1
-        
-        if source_file.suffix.lower() in ['.jpg', '.jpeg']:
-            dest_file = docs_folder / f"doc_{doc_count}.png"
-            try:
-                with Image.open(source_file) as img:
-                    img.save(dest_file, 'PNG')
-            except:
-                dest_file = docs_folder / f"doc_{doc_count}{source_file.suffix}"
-                shutil.copy2(source_file, dest_file)
-        else:
-            dest_file = docs_folder / f"doc_{doc_count}{source_file.suffix}"
-            shutil.copy2(source_file, dest_file)
-        
-        EmployeeDocument.create(chief_employee=employee, document_type=doc_name, page_number=1, file_path=str(dest_file))
-        return str(dest_file)
-    
-    def view_document(self, doc):
-        if doc.file_path and os.path.exists(doc.file_path):
-            self.open_pdf(doc.file_path)
-        else:
-            self.show_snackbar("Файл не найден", True)
-    
-    def delete_document_simple(self, doc, employee, dialog_ref=None):
-        try:
-            doc.delete_instance()
-            if hasattr(dialog_ref, 'tabs'):
-                dialog_ref.tabs[2].content = ft.Column(self._get_documents_content(employee, dialog_ref), scroll=ft.ScrollMode.AUTO)
-                self.page.update()
-        except:
-            pass
+
     
     def _get_detail_content(self, employee):
         # Получаем закрепленные объекты
@@ -405,9 +157,10 @@ class ChiefEmployeesPage(BaseEmployeePage):
                     self.get_photo_widget(employee.full_name),
                     ft.Text(f"Дата рождения: {self.format_date(employee.birth_date)}", size=16),
                     ft.Text(f"Должность: {employee.position}", size=16),
+                    ft.Text(f"Разряд охранника: {str(getattr(employee, 'guard_rank', '')) if getattr(employee, 'guard_rank', None) else 'Не указано'}", size=16),
                     ft.Text(f"Зарплата: {employee.salary} ₽", size=16),
                     ft.Text(f"Способ выдачи зарплаты: {employee.payment_method}", size=16),
-                    ft.Text(f"Компания: {getattr(employee, 'company', 'Легион')}", size=16),
+                    ft.Text(f"Компании: {self._get_employee_companies(employee)}", size=16),
                     ft.Text(f"Закрепленные объекты: {objects_text}", size=16),
                 ]),
                 ft.Container(expand=True)
@@ -419,7 +172,8 @@ class ChiefEmployeesPage(BaseEmployeePage):
         return "Добавить начальника охраны"
     
     def _get_form_fields(self):
-        return [self.name_field, self.birth_field, self.position_field, self.salary_field, self.payment_method_field, self.company_field]
+        company_row = ft.Row([ft.Text("Компании:", width=100)] + self.company_checkboxes)
+        return [self.name_field, self.birth_field, self.position_field, self.guard_rank_field, self.salary_field, self.payment_method_field, company_row]
     
     def _save_operation(self):
         full_name = self.name_field.value.strip()
@@ -442,10 +196,17 @@ class ChiefEmployeesPage(BaseEmployeePage):
             full_name=full_name,
             birth_date=birth_date,
             position=position_value,
+            guard_rank=self.guard_rank_field.value if self.guard_rank_field.value else None,
             salary=salary,
-            payment_method=payment_method_value or "на карту",
-            company=self.company_field.value or "Легион"
+            payment_method=payment_method_value or "на карту"
         )
+        
+        # Сохраняем связи с компаниями
+        from database.models import Company, EmployeeCompany
+        for checkbox in self.company_checkboxes:
+            if checkbox.value:
+                company = Company.get(Company.name == checkbox.label)
+                EmployeeCompany.create(chief_employee=employee, company=company)
         
 
         return True
@@ -464,20 +225,27 @@ class ChiefEmployeesPage(BaseEmployeePage):
         self.edit_name_field = ft.TextField(label="ФИО", width=300)
         self.edit_birth_field = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=180, on_change=self.format_date_input, max_length=10)
         self.edit_position_field = ft.TextField(label="Должность", width=250)
+        self.edit_guard_rank_field = ft.Dropdown(label="Разряд охранника", width=180, options=[ft.dropdown.Option("ОВН"), ft.dropdown.Option("Б")] + [ft.dropdown.Option(str(i)) for i in range(4, 7)])
         self.edit_salary_field = ft.TextField(label="Зарплата", width=150)
         self.edit_payment_method_field = ft.Dropdown(label="Способ выдачи зарплаты", width=250, options=[ft.dropdown.Option("на карту"), ft.dropdown.Option("на руки")])
-        self.edit_company_field = ft.Dropdown(label="Компания", width=150, options=[ft.dropdown.Option("Легион"), ft.dropdown.Option("Норд")])
+        self.edit_company_checkboxes = self._create_company_checkboxes(False)
     
     def _get_edit_fields(self):
-        return [self.edit_name_field, self.edit_birth_field, self.edit_position_field, self.edit_salary_field, self.edit_payment_method_field, self.edit_company_field]
+        edit_company_row = ft.Row([ft.Text("Компании:", width=100)] + self.edit_company_checkboxes)
+        return [self.edit_name_field, self.edit_birth_field, self.edit_position_field, self.edit_guard_rank_field, self.edit_salary_field, self.edit_payment_method_field, edit_company_row]
     
     def _populate_edit_fields(self, employee):
         self.edit_name_field.value = employee.full_name
         self.edit_birth_field.value = self.format_date(employee.birth_date)
         self.edit_position_field.value = employee.position
+        self.edit_guard_rank_field.value = str(employee.guard_rank) if hasattr(employee, 'guard_rank') and employee.guard_rank else None
         self.edit_salary_field.value = str(employee.salary)
         self.edit_payment_method_field.value = employee.payment_method
-        self.edit_company_field.value = getattr(employee, 'company', 'Легион')
+        # Заполняем чекбоксы компаний
+        from database.models import EmployeeCompany, Company
+        employee_companies = [ec.company.name for ec in EmployeeCompany.select().join(Company).where(EmployeeCompany.chief_employee == employee)]
+        for checkbox in self.edit_company_checkboxes:
+            checkbox.value = checkbox.label in employee_companies
     
     def _save_edit_operation(self):
         full_name = self.edit_name_field.value.strip()
@@ -499,62 +267,27 @@ class ChiefEmployeesPage(BaseEmployeePage):
         self.current_employee.full_name = full_name
         self.current_employee.birth_date = birth_date
         self.current_employee.position = position_value
+        self.current_employee.guard_rank = self.edit_guard_rank_field.value if self.edit_guard_rank_field.value else None
         self.current_employee.salary = salary
         self.current_employee.payment_method = payment_method_value or "на карту"
-        self.current_employee.company = self.edit_company_field.value or "Легион"
         
         self.current_employee.save()
+        
+        # Обновляем связи с компаниями
+        from database.models import Company, EmployeeCompany
+        # Удаляем старые связи
+        EmployeeCompany.delete().where(EmployeeCompany.chief_employee == self.current_employee).execute()
+        # Создаем новые
+        for checkbox in self.edit_company_checkboxes:
+            if checkbox.value:
+                company = Company.get(Company.name == checkbox.label)
+                EmployeeCompany.create(chief_employee=self.current_employee, company=company)
         return True
     
     def _get_employee_type(self):
         return "начальника"
     
-    def show_detail_dialog(self, employee):
-        """Показывает диалог с вкладками"""
-        tabs = ft.Tabs(
-            selected_index=0,
-            tabs=[
-                ft.Tab(
-                    text="Основная информация",
-                    content=ft.Column(self._get_detail_content(employee), scroll=ft.ScrollMode.AUTO)
-                ),
-                ft.Tab(
-                    text="Личные карточки",
-                    content=ft.Column([], scroll=ft.ScrollMode.AUTO)
-                ),
-                ft.Tab(
-                    text="Документы",
-                    content=ft.Column([], scroll=ft.ScrollMode.AUTO)
-                )
-            ],
-            expand=True
-        )
-        
-        def on_tab_change(e):
-            if e.control.selected_index == 1:
-                tabs.tabs[1].content = ft.Column(self._get_personal_cards_content(employee, tabs), scroll=ft.ScrollMode.AUTO)
-            elif e.control.selected_index == 2:
-                tabs.tabs[2].content = ft.Column(self._get_documents_content(employee, tabs), scroll=ft.ScrollMode.AUTO)
-            self.page.update()
-        
-        tabs.on_change = on_tab_change
-        
-        tabs_dialog = ft.AlertDialog(
-            title=ft.Text(f"{self._get_detail_title()}: {employee.full_name}"),
-            content=tabs,
-            actions=[
-                ft.TextButton("Изменить фотографию", on_click=lambda e: self.change_photo(employee)),
-                ft.TextButton("Управление объектами", on_click=lambda e: self.show_objects_dialog(employee)),
-                ft.TextButton("Редактировать", on_click=lambda e: self.show_edit_dialog(employee)),
-                ft.TextButton("Уволить", on_click=lambda e: self.show_termination_dialog(employee), style=ft.ButtonStyle(color=ft.Colors.RED)),
-                ft.TextButton("Закрыть", on_click=lambda e: setattr(tabs_dialog, 'open', False) or self.page.update())
-            ],
-            modal=True
-        )
-        
-        self.page.overlay.append(tabs_dialog)
-        tabs_dialog.open = True
-        self.page.update()
+
     
     def show_objects_dialog(self, chief):
         """Показывает диалог управления объектами"""
@@ -627,27 +360,7 @@ class ChiefEmployeesPage(BaseEmployeePage):
             if not db.is_closed():
                 db.close()
 
-    def change_photo(self, employee):
-        """Изменение фотографии сотрудника"""
-        def on_result(e: ft.FilePickerResultEvent):
-            if e.files:
-                try:
-                    photo_path = self.photo_manager.save_photo(employee.full_name, e.files[0].path)
-                    employee.photo_path = photo_path
-                    employee.save()
-                    self.show_snackbar("Фотография обновлена!")
-                    self.close_detail_dialog()
-                except Exception as ex:
-                    self.show_snackbar(f"Ошибка сохранения фото: {ex}", True)
-        
-        file_picker = ft.FilePicker(on_result=on_result)
-        if self.page and file_picker not in self.page.overlay:
-            self.page.overlay.append(file_picker)
-            self.page.update()
-        file_picker.pick_files(
-            dialog_title="Выберите фотографию или PDF",
-            allowed_extensions=["jpg", "jpeg", "png", "bmp", "pdf"]
-        )
+
     
 
     
