@@ -17,7 +17,7 @@ from views.discarded_cards import discarded_cards_page
 from database.models import Employee
 from datetime import datetime
 from utils.photo_manager import PhotoManager
-
+5
 
 
 def main(page: ft.Page):

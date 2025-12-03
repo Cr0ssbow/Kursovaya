@@ -8,21 +8,12 @@ class OfficeEmployeesPage(BaseEmployeePage):
     
     def _create_form_fields(self):
         """Создает поля формы"""
-        self.name_field = ft.TextField(label="ФИО", width=300)
-        self.birth_field = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=180, on_change=self.format_date_input, max_length=10)
-        self.position_field = ft.TextField(label="Должность", width=250)
-        self.salary_field = ft.TextField(label="Зарплата", width=150)
-        self.payment_method_field = ft.Dropdown(label="Способ выдачи зарплаты", width=250, options=[ft.dropdown.Option("на карту"), ft.dropdown.Option("на руки")], value="на карту")
+        self.name_field = ft.TextField(label="ФИО", width=500)
+        self.birth_field = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=500, on_change=self.format_date_input, max_length=10)
+        self.position_field = ft.TextField(label="Должность", width=500)
+        self.salary_field = ft.TextField(label="Зарплата", width=500)
+        self.payment_method_field = ft.Dropdown(label="Способ выдачи зарплаты", width=500, options=[ft.dropdown.Option("на карту"), ft.dropdown.Option("на руки")], value="на карту")
         self.company_checkboxes = self._create_company_checkboxes()
-    
-    def _create_list(self):
-        """Создает список"""
-        self.employees_list = ft.ListView(
-            expand=True,
-            spacing=5,
-            padding=10,
-            height=500
-        )
     
     def _get_base_query(self):
         return OfficeEmployee.select().where(OfficeEmployee.termination_date.is_null())
@@ -35,17 +26,6 @@ class OfficeEmployeesPage(BaseEmployeePage):
         company_ids = [c.id for c in Company.select().where(Company.name.in_(companies))]
         employee_ids = [ec.office_employee_id for ec in EmployeeCompany.select().where(EmployeeCompany.company_id.in_(company_ids))]
         return query.where(OfficeEmployee.id.in_(employee_ids))
-    
-    def _create_company_checkboxes(self, first_checked=True):
-        """Создает чекбоксы для компаний"""
-        from database.models import Company
-        checkboxes = []
-        for i, company in enumerate(Company.select()):
-            checkboxes.append(ft.Checkbox(
-                label=company.name, 
-                value=first_checked and i == 0
-            ))
-        return checkboxes
     
     def _get_employee_companies(self, employee):
         """Возвращает список компаний сотрудника"""
@@ -134,16 +114,15 @@ class OfficeEmployeesPage(BaseEmployeePage):
     
     def _create_edit_fields(self):
         """Создает поля редактирования"""
-        self.edit_name_field = ft.TextField(label="ФИО", width=300)
-        self.edit_birth_field = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=180, on_change=self.format_date_input, max_length=10)
-        self.edit_position_field = ft.TextField(label="Должность", width=250)
-        self.edit_salary_field = ft.TextField(label="Зарплата", width=150)
-        self.edit_payment_method_field = ft.Dropdown(label="Способ выдачи зарплаты", width=250, options=[ft.dropdown.Option("на карту"), ft.dropdown.Option("на руки")])
+        self.edit_name_field = ft.TextField(label="ФИО", width=500)
+        self.edit_birth_field = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=500, on_change=self.format_date_input, max_length=10)
+        self.edit_position_field = ft.TextField(label="Должность", width=500)
+        self.edit_salary_field = ft.TextField(label="Зарплата", width=500)
+        self.edit_payment_method_field = ft.Dropdown(label="Способ выдачи зарплаты", width=500, options=[ft.dropdown.Option("на карту"), ft.dropdown.Option("на руки")])
         self.edit_company_checkboxes = self._create_company_checkboxes(False)
     
     def _get_edit_fields(self):
-        edit_company_row = ft.Row([ft.Text("Компании:", width=100)] + self.edit_company_checkboxes)
-        return [self.edit_name_field, self.edit_birth_field, self.edit_position_field, self.edit_salary_field, self.edit_payment_method_field, edit_company_row]
+        return [self.edit_name_field, self.edit_birth_field, self.edit_position_field, self.edit_salary_field, self.edit_payment_method_field, self.create_edit_company_dropdown()]
     
     def _populate_edit_fields(self, employee):
         self.edit_name_field.value = employee.full_name

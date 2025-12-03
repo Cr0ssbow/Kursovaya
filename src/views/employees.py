@@ -2,7 +2,6 @@ import flet as ft
 from database.models import GuardEmployee, Company
 from datetime import datetime
 from base.base_employee_page import BaseEmployeePage
-import os
 
 class EmployeesPage(BaseEmployeePage):
     """Страница сотрудников охраны"""
@@ -25,24 +24,15 @@ class EmployeesPage(BaseEmployeePage):
     
     def _create_edit_fields(self):
         """Создает поля редактирования"""
-        self.edit_name_field = ft.TextField(label="ФИО", width=300)
-        self.edit_birth_field = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=180, on_change=self.format_date_input, max_length=10)
-        self.edit_certificate_field = ft.TextField(label="Номер удостоверения (буква№ 000000)", width=200, max_length=9, on_change=self._format_certificate_input)
-        self.edit_guard_license_field = ft.TextField(label="Дата выдачи УЧО (дд.мм.гггг)", width=250, on_change=self.format_date_input, max_length=10)
-        self.edit_medical_exam_field = ft.TextField(label="Дата прохождения медкомиссии (дд.мм.гггг)", width=250, on_change=self.format_date_input, max_length=10)
-        self.edit_periodic_check_field = ft.TextField(label="Дата прохождения периодической проверки (дд.мм.гггг)", width=250, on_change=self.format_date_input, max_length=10)
-        self.edit_guard_rank_field = ft.Dropdown(label="Разряд охранника", width=180, options=[ft.dropdown.Option("ОВН"), ft.dropdown.Option("Б")] + [ft.dropdown.Option(str(i)) for i in range(4, 7)])
-        self.edit_payment_method_field = ft.Dropdown(label="Способ выдачи зарплаты", width=250, options=[ft.dropdown.Option("на карту"), ft.dropdown.Option("на руки")])
+        self.edit_name_field = ft.TextField(label="ФИО", width=500)
+        self.edit_birth_field = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=500, on_change=self.format_date_input, max_length=10)
+        self.edit_certificate_field = ft.TextField(label="Номер удостоверения (буква№ 000000)", width=500, max_length=9, on_change=self._format_certificate_input)
+        self.edit_guard_license_field = ft.TextField(label="Дата выдачи УЧО (дд.мм.гггг)", width=500, on_change=self.format_date_input, max_length=10)
+        self.edit_medical_exam_field = ft.TextField(label="Дата прохождения медкомиссии (дд.мм.гггг)", width=500, on_change=self.format_date_input, max_length=10)
+        self.edit_periodic_check_field = ft.TextField(label="Дата прохождения периодической проверки (дд.мм.гггг)", width=500, on_change=self.format_date_input, max_length=10)
+        self.edit_guard_rank_field = ft.Dropdown(label="Разряд охранника", width=500, options=[ft.dropdown.Option("ОВН"), ft.dropdown.Option("Б")] + [ft.dropdown.Option(str(i)) for i in range(4, 7)])
+        self.edit_payment_method_field = ft.Dropdown(label="Способ выдачи зарплаты", width=500, options=[ft.dropdown.Option("на карту"), ft.dropdown.Option("на руки")])
         self.edit_company_checkboxes = self._create_company_checkboxes(False)
-    
-    def _create_list(self):
-        """Создает список"""
-        self.employees_list = ft.ListView(
-            expand=True,
-            spacing=5,
-            padding=10,
-            height=500
-        )
     
     def _get_base_query(self):
         return GuardEmployee.select().where(GuardEmployee.termination_date.is_null())
@@ -65,16 +55,6 @@ class EmployeesPage(BaseEmployeePage):
         company_ids = [c.id for c in Company.select().where(Company.name.in_(companies))]
         employee_ids = [ec.guard_employee_id for ec in EmployeeCompany.select().where(EmployeeCompany.company_id.in_(company_ids))]
         return query.where(GuardEmployee.id.in_(employee_ids))
-    
-    def _create_company_checkboxes(self, first_checked=True):
-        """Создает чекбоксы для компаний"""
-        checkboxes = []
-        for i, company in enumerate(Company.select()):
-            checkboxes.append(ft.Checkbox(
-                label=company.name, 
-                value=first_checked and i == 0
-            ))
-        return checkboxes
     
     def _get_employee_companies(self, employee):
         """Возвращает список компаний сотрудника"""
@@ -157,8 +137,7 @@ class EmployeesPage(BaseEmployeePage):
         return [self.name_field, self.birth_field, self.certificate_field, self.guard_license_field, self.medical_exam_field, self.periodic_check_field, self.guard_rank_field, self.payment_method_field, company_row]
     
     def _get_edit_fields(self):
-        edit_company_row = ft.Row([ft.Text("Компании:", width=100)] + self.edit_company_checkboxes)
-        return [self.edit_name_field, self.edit_birth_field, self.edit_certificate_field, self.edit_guard_license_field, self.edit_medical_exam_field, self.edit_periodic_check_field, self.edit_guard_rank_field, self.edit_payment_method_field, edit_company_row]
+        return [self.edit_name_field, self.edit_birth_field, self.edit_certificate_field, self.edit_guard_license_field, self.edit_medical_exam_field, self.edit_periodic_check_field, self.edit_guard_rank_field, self.edit_payment_method_field, self.create_edit_company_dropdown()]
     
     def _populate_edit_fields(self, employee):
         self.edit_name_field.value = employee.full_name
@@ -273,7 +252,7 @@ class EmployeesPage(BaseEmployeePage):
         """Обработчик изменения фильтра по разряду"""
         self.selected_rank = e.control.value
         self.current_page = 0
-        self.refresh_table()
+        self.refresh_list()
         if self.page:
             self.page.update()
     
@@ -295,16 +274,6 @@ class EmployeesPage(BaseEmployeePage):
         """Переопределяем строку поиска для добавления фильтра по разряду"""
         return ft.Row([
             ft.TextField(label="Поиск по ФИО", width=300, on_change=self.on_search_change, autofocus=False, dense=True),
-            ft.IconButton(
-                icon=ft.Icons.ARROW_UPWARD if (self.sort_by_name and self.sort_ascending) else ft.Icons.ARROW_DOWNWARD if self.sort_by_name else ft.Icons.ABC,
-                tooltip=f"По имени {'↑' if self.sort_ascending else '↓'}" if self.sort_by_name else "Сортировка по имени",
-                on_click=self.sort_by_name_click
-            ),
-            ft.IconButton(
-                icon=ft.Icons.ARROW_UPWARD if (not self.sort_by_name and self.sort_ascending) else ft.Icons.ARROW_DOWNWARD if not self.sort_by_name else ft.Icons.MILITARY_TECH,
-                tooltip=f"По разряду {'↑' if self.sort_ascending else '↓'}" if not self.sort_by_name else "Сортировка по разряду",
-                on_click=self.sort_by_secondary_click
-            ),
             ft.Dropdown(
                 label="Разряд",
                 width=200,
@@ -319,6 +288,16 @@ class EmployeesPage(BaseEmployeePage):
                 ],
                 on_change=self.on_rank_change,
                 dense=True,
+            ),
+            ft.IconButton(
+                icon=ft.Icons.ARROW_UPWARD if (self.sort_by_name and self.sort_ascending) else ft.Icons.ARROW_DOWNWARD if self.sort_by_name else ft.Icons.ABC,
+                tooltip=f"По имени {'↑' if self.sort_ascending else '↓'}" if self.sort_by_name else "Сортировка по имени",
+                on_click=self.sort_by_name_click
+            ),
+            ft.IconButton(
+                icon=ft.Icons.ARROW_UPWARD if (not self.sort_by_name and self.sort_ascending) else ft.Icons.ARROW_DOWNWARD if not self.sort_by_name else ft.Icons.MILITARY_TECH,
+                tooltip=f"По разряду {'↑' if self.sort_ascending else '↓'}" if not self.sort_by_name else "Сортировка по разряду",
+                on_click=self.sort_by_secondary_click
             ),
         ], alignment=ft.MainAxisAlignment.START, spacing=20)
     

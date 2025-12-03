@@ -13,8 +13,6 @@ class BaseEmployeePage(BasePage):
         self.employees_list = None
         self.add_dialog = None
         self.detail_dialog = None
-        self.show_nord = True
-        self.show_legion = True
         self.photo_manager = PhotoManager()
         self.current_page = 0
         self.page_size = 9
@@ -197,7 +195,7 @@ class BaseEmployeePage(BasePage):
         self.current_employee = employee
         self._populate_edit_fields(employee)
         self.edit_dialog.title = ft.Text(f"Редактировать {self._get_employee_type()}")
-        self.edit_dialog.content = ft.Column(self._get_edit_fields(), spacing=10)
+        self.edit_dialog.content = ft.Column(self._get_edit_fields(), spacing=15)
         self.edit_dialog.actions = [
             ft.TextButton("Сохранить", on_click=self.save_edit_employee),
             ft.TextButton("Отмена", on_click=self.close_edit_dialog),
@@ -448,20 +446,184 @@ class BaseEmployeePage(BasePage):
             allowed_extensions=["jpg", "jpeg", "png", "bmp", "pdf"]
         )
     
+    def create_company_filter_dropdown(self):
+        """Создает dropdown с чекбоксами для фильтрации компаний"""
+        from database.models import Company
+        
+        # Инициализируем фильтры для всех компаний
+        companies = list(Company.select())
+        for company in companies:
+            attr_name = f"show_{company.name.lower().replace(' ', '_')}"
+            if not hasattr(self, attr_name):
+                setattr(self, attr_name, True)
+        
+        def update_company_filter(company_name, value):
+            attr_name = f"show_{company_name.lower().replace(' ', '_')}"
+            setattr(self, attr_name, value)
+            self.on_company_filter_change(None)
+            
+            # Обновляем текст кнопки
+            selected = []
+            for company in companies:
+                attr_name = f"show_{company.name.lower().replace(' ', '_')}"
+                if getattr(self, attr_name, True):
+                    selected.append(company.name)
+            
+            if len(selected) == len(companies):
+                self.company_button.text = "Все компании"
+            elif len(selected) == 0:
+                self.company_button.text = "Нет компаний"
+            else:
+                self.company_button.text = f"Выбрано: {len(selected)}"
+            self.page.update()
+        
+        # Создаем элементы меню
+        menu_items = []
+        for company in companies:
+            attr_name = f"show_{company.name.lower().replace(' ', '_')}"
+            
+            def make_checkbox_handler(comp_name):
+                def handler(e):
+                    update_company_filter(comp_name, e.control.value)
+                return handler
+            
+            checkbox = ft.Checkbox(
+                label=company.name,
+                value=getattr(self, attr_name, True),
+                on_change=make_checkbox_handler(company.name)
+            )
+            
+            menu_items.append(
+                ft.PopupMenuItem(
+                    content=checkbox,
+                    on_click=lambda e, cb=checkbox: setattr(cb, 'value', not cb.value) or cb.on_change(type('Event', (), {'control': cb})())
+                )
+            )
+        
+        # Создаем кнопку с меню
+        self.company_button = ft.PopupMenuButton(
+            content=ft.Container(
+                content=ft.Row([
+                    ft.Text("Все ЧОПЫ", size=14),
+                    ft.Icon(ft.Icons.ARROW_DROP_DOWN, size=20)
+                ], tight=True),
+                padding=ft.padding.symmetric(horizontal=12, vertical=8),
+                border=ft.border.all(1, ft.Colors.BLACK87),
+                border_radius=8,
+                width=180, 
+                height=47,
+            ),
+            items=menu_items,
+            tooltip="Фильтр по компаниям"
+        )
+        
+        return self.company_button
+    
+    def create_edit_company_dropdown(self):
+        """Создает dropdown с чекбоксами для редактирования компаний"""
+        from database.models import Company
+        
+        companies = list(Company.select())
+        
+        def update_company_selection(company_name, value):
+            for checkbox in self.edit_company_checkboxes:
+                if checkbox.label == company_name:
+                    checkbox.value = value
+                    break
+            
+            selected = [cb.label for cb in self.edit_company_checkboxes if cb.value]
+            
+            if len(selected) == len(companies):
+                self.edit_company_button.content.content.controls[0].value = "Все компании"
+            elif len(selected) == 0:
+                self.edit_company_button.content.content.controls[0].value = "Нет компаний"
+            else:
+                self.edit_company_button.content.content.controls[0].value = f"Выбрано: {len(selected)}"
+            self.page.update()
+        
+        menu_items = []
+        for company in companies:
+            def make_checkbox_handler(comp_name):
+                def handler(e):
+                    update_company_selection(comp_name, e.control.value)
+                return handler
+            
+            checkbox_value = False
+            for checkbox in self.edit_company_checkboxes:
+                if checkbox.label == company.name:
+                    checkbox_value = checkbox.value
+                    break
+            
+            checkbox = ft.Checkbox(
+                label=company.name,
+                value=checkbox_value,
+                on_change=make_checkbox_handler(company.name)
+            )
+            
+            menu_items.append(
+                ft.PopupMenuItem(
+                    content=checkbox,
+                    on_click=lambda e, cb=checkbox: setattr(cb, 'value', not cb.value) or cb.on_change(type('Event', (), {'control': cb})())
+                )
+            )
+        
+        selected = [cb.label for cb in self.edit_company_checkboxes if cb.value]
+        if len(selected) == len(companies):
+            initial_text = "Все компании"
+        elif len(selected) == 0:
+            initial_text = "Нет компаний"
+        else:
+            initial_text = f"Выбрано: {len(selected)}"
+        
+        self.edit_company_button = ft.PopupMenuButton(
+            content=ft.Container(
+                content=ft.Row([
+                    ft.Text(initial_text, size=14),
+                    ft.Icon(ft.Icons.ARROW_DROP_DOWN, size=20)
+                ], tight=True),
+                padding=ft.padding.symmetric(horizontal=12, vertical=8),
+                border=ft.border.all(1, ft.Colors.BLACK87),
+                border_radius=8,
+                width=500, 
+                height=47,
+            ),
+            items=menu_items,
+            tooltip="Выбор компаний"
+        )
+        
+        return self.edit_company_button
+    
+    def _create_company_checkboxes(self, first_checked=True):
+        """Создает чекбоксы для компаний"""
+        from database.models import Company
+        checkboxes = []
+        for i, company in enumerate(Company.select()):
+            checkboxes.append(ft.Checkbox(
+                label=company.name, 
+                value=first_checked and i == 0
+            ))
+        return checkboxes
+    
+    def _create_list(self):
+        """Создает список"""
+        self.employees_list = ft.ListView(
+            expand=True,
+            spacing=5,
+            padding=10,
+            height=500
+        )
+    
     def render(self) -> ft.Column:
         """Возвращает интерфейс страницы"""
         self.refresh_list()
         
-        # Создаем галочки для фильтрации
-        if not hasattr(self, 'show_rosbezopasnost'):
-            self.show_rosbezopasnost = True
-        
-        nord_checkbox = ft.Checkbox(label="Норд", value=self.show_nord, on_change=lambda e: (setattr(self, 'show_nord', e.control.value), self.on_company_filter_change(e)))
-        legion_checkbox = ft.Checkbox(label="Легион", value=self.show_legion, on_change=lambda e: (setattr(self, 'show_legion', e.control.value), self.on_company_filter_change(e)))
-        rosbezopasnost_checkbox = ft.Checkbox(label="Росбезопасность", value=self.show_rosbezopasnost, on_change=lambda e: (setattr(self, 'show_rosbezopasnost', e.control.value), self.on_company_filter_change(e)))
-        
         search_row = self._get_search_row()
-        search_row.controls.extend([nord_checkbox, legion_checkbox, rosbezopasnost_checkbox])
+        # Вставляем фильтр по компании перед кнопками сортировки
+        company_filter = self.create_company_filter_dropdown()
+        if len(search_row.controls) >= 2:
+            search_row.controls.insert(-2, company_filter)
+        else:
+            search_row.controls.append(company_filter)
         
         return ft.Column([
             ft.Row([
@@ -496,10 +658,7 @@ class BaseEmployeePage(BasePage):
         """Создает поля формы"""
         pass
     
-    @abstractmethod
-    def _create_list(self):
-        """Создает список"""
-        pass
+
     
     @abstractmethod
     def _get_base_query(self):
@@ -512,16 +671,17 @@ class BaseEmployeePage(BasePage):
             query = self._apply_name_filter(query)
         
         # Применяем фильтр по компаниям
+        from database.models import Company
         companies = []
-        if self.show_nord:
-            companies.append("Норд")
-        if self.show_legion:
-            companies.append("Легион")
-        if hasattr(self, 'show_rosbezopasnost') and self.show_rosbezopasnost:
-            companies.append("Росбезопасность")
+        all_companies = list(Company.select())
+        
+        for company in all_companies:
+            attr_name = f"show_{company.name.lower().replace(' ', '_')}"
+            if getattr(self, attr_name, True):
+                companies.append(company.name)
         
         # Применяем фильтр только если выбрана не вся компания
-        if len(companies) < 3 and len(companies) > 0:
+        if len(companies) < len(all_companies) and len(companies) > 0:
             query = self._apply_company_filter(query, companies)
         elif len(companies) == 0:
             # Если ни одна компания не выбрана, ничего не показываем
