@@ -126,7 +126,7 @@ class ChiefEmployeesPage(BaseEmployeePage):
         content = [
             ft.Row([
                 ft.Column([
-                    self.get_photo_widget(employee.full_name),
+                    self.get_photo_widget(employee),
                     ft.Text(f"Дата рождения: {self.format_date(employee.birth_date)}", size=16),
                     ft.Text(f"Должность: {employee.position}", size=16),
                     ft.Text(f"Разряд охранника: {str(getattr(employee, 'guard_rank', '')) if getattr(employee, 'guard_rank', None) else 'Не указано'}", size=16),

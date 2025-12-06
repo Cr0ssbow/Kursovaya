@@ -63,5 +63,11 @@ def drawer(on_change_handler):
                 label="Списанные карточки",
                 selected_icon=ft.Icons.CREDIT_CARD_OFF_OUTLINED,
             ),
+            ft.Divider(thickness=2),
+            ft.NavigationDrawerDestination(
+                icon=ft.Icon(ft.Icons.ADMIN_PANEL_SETTINGS),
+                label="Администрирование",
+                selected_icon=ft.Icons.ADMIN_PANEL_SETTINGS_OUTLINED,
+            ),
         ],
     )

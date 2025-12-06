@@ -8,6 +8,7 @@ def objects_page(page: ft.Page = None):
     sort_ascending = True
     sort_by_name = True
     objects_list_view = ft.ListView(expand=True, spacing=10, padding=20)
+    page_text = ft.Text(f"Страница {current_page + 1}")
 
     # Диалог и поля формы
     add_dialog = ft.AlertDialog(modal=True)
@@ -265,6 +266,7 @@ def objects_page(page: ft.Page = None):
                 )
             )
         
+        page_text.value = f"Страница {current_page + 1}"
         if page:
             page.update()
 
@@ -376,7 +378,7 @@ def objects_page(page: ft.Page = None):
                     icon=ft.Icons.ARROW_BACK,
                     on_click=prev_page
                 ),
-                ft.Text(f"Страница {current_page + 1}"),
+                page_text,
                 ft.IconButton(
                     icon=ft.Icons.ARROW_FORWARD,
                     on_click=next_page

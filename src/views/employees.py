@@ -12,14 +12,14 @@ class EmployeesPage(BaseEmployeePage):
     
     def _create_form_fields(self):
         """Создает поля формы"""
-        self.name_field = ft.TextField(label="ФИО", width=300)
-        self.birth_field = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=180, on_change=self.format_date_input, max_length=10)
-        self.certificate_field = ft.TextField(label="Номер удостоверения (буква№ 000000)", width=200, max_length=9, on_change=self._format_certificate_input)
-        self.guard_license_field = ft.TextField(label="Дата выдачи УЧО (дд.мм.гггг)", width=250, on_change=self.format_date_input, max_length=10)
-        self.medical_exam_field = ft.TextField(label="Дата прохождения медкомиссии (дд.мм.гггг)", width=250, on_change=self.format_date_input, max_length=10)
-        self.periodic_check_field = ft.TextField(label="Дата прохождения периодической проверки (дд.мм.гггг)", width=250, on_change=self.format_date_input, max_length=10)
-        self.guard_rank_field = ft.Dropdown(label="Разряд охранника", width=180, options=[ft.dropdown.Option("ОВН"), ft.dropdown.Option("Б")] + [ft.dropdown.Option(str(i)) for i in range(4, 7)])
-        self.payment_method_field = ft.Dropdown(label="Способ выдачи зарплаты", width=250, options=[ft.dropdown.Option("на карту"), ft.dropdown.Option("на руки")], value="на карту")
+        self.name_field = ft.TextField(label="ФИО", width=500)
+        self.birth_field = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=500, on_change=self.format_date_input, max_length=10)
+        self.certificate_field = ft.TextField(label="Номер удостоверения (буква№ 000000)", width=500, max_length=9, on_change=self._format_certificate_input)
+        self.guard_license_field = ft.TextField(label="Дата выдачи УЧО (дд.мм.гггг)", width=500, on_change=self.format_date_input, max_length=10)
+        self.medical_exam_field = ft.TextField(label="Дата прохождения медкомиссии (дд.мм.гггг)", width=500, on_change=self.format_date_input, max_length=10)
+        self.periodic_check_field = ft.TextField(label="Дата прохождения периодической проверки (дд.мм.гггг)", width=500, on_change=self.format_date_input, max_length=10)
+        self.guard_rank_field = ft.Dropdown(label="Разряд охранника", width=500, options=[ft.dropdown.Option("ОВН"), ft.dropdown.Option("Б")] + [ft.dropdown.Option(str(i)) for i in range(4, 7)])
+        self.payment_method_field = ft.Dropdown(label="Способ выдачи зарплаты", width=500, options=[ft.dropdown.Option("на карту"), ft.dropdown.Option("на руки")], value="на карту")
         self.company_checkboxes = self._create_company_checkboxes()
     
     def _create_edit_fields(self):
@@ -43,7 +43,7 @@ class EmployeesPage(BaseEmployeePage):
         
         # Затем добавляем фильтр по разряду
         if self.selected_rank != "Все разряды":
-            query = query.where(GuardEmployee.guard_rank == int(self.selected_rank))
+            query = query.where(GuardEmployee.guard_rank == self.selected_rank)
         
         return query
     
@@ -101,7 +101,8 @@ class EmployeesPage(BaseEmployeePage):
         content = [
             ft.Row([
                 ft.Column([
-                    self.get_photo_widget(employee.full_name),
+                    ft.Container(height=10),
+                    self.get_photo_widget(employee),
                     ft.Text(f"Дата рождения: {self.format_date(employee.birth_date)}", size=16),
                     ft.Text(f"Номер удостоверения: {getattr(employee, 'certificate_number', '') or 'Не указано'}", size=16),
                     ft.Text(f"Дата выдачи УЧО: {self.format_date(getattr(employee, 'guard_license_date', None))}", size=16),
@@ -110,7 +111,7 @@ class EmployeesPage(BaseEmployeePage):
                     ft.Text(f"Периодическая проверка: {self.format_date(getattr(employee, 'periodic_check_date', None))}", size=16),
                     ft.Text(f"Способ выдачи зарплаты: {getattr(employee, 'payment_method', 'на карту')}", size=16),
                     ft.Text(f"Компании: {self._get_employee_companies(employee)}", size=16),
-                ]),
+                ], spacing=15),
                 ft.Container(expand=True)
             ])
         ]

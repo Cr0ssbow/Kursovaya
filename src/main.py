@@ -14,15 +14,14 @@ from views.statistics import statistics_page
 from views.notes import notes_page
 from views.terminated import terminated_page
 from views.discarded_cards import discarded_cards_page
+from views.administration import administration_page
 from database.models import Employee
 from datetime import datetime
-from utils.photo_manager import PhotoManager
-5
-
-
+from utils.faker_data import generate_all_fake_data, create_december_shifts
 def main(page: ft.Page):
-    # Инициализируем менеджер фотографий (создает папки)
-    photo_manager = PhotoManager()
+    # Генерируем тестовые данные при первом запуске
+    #generate_all_fake_data()  # Раскомментируйте для генерации данных
+    #create_december_shifts()  # Создаем 100 смен на каждый день декабря
     
     page.title = "ЧОП Легион - Система учёта сотрудников"
     if getattr(sys, 'frozen', False):
@@ -111,6 +110,9 @@ def main(page: ft.Page):
 
         elif selected_index == 10:
             content_container.content = discarded_cards_page(page)
+
+        elif selected_index == 11:
+            content_container.content = administration_page(page)
 
         page.close(page.drawer)
         page.update()

@@ -2,7 +2,6 @@ import flet as ft
 from abc import abstractmethod
 from datetime import datetime
 from base.base_page import BasePage
-from utils.photo_manager import PhotoManager
 import os
 
 class BaseEmployeePage(BasePage):
@@ -13,7 +12,7 @@ class BaseEmployeePage(BasePage):
         self.employees_list = None
         self.add_dialog = None
         self.detail_dialog = None
-        self.photo_manager = PhotoManager()
+
         self.current_page = 0
         self.page_size = 9
         self.sort_ascending = True
@@ -147,10 +146,13 @@ class BaseEmployeePage(BasePage):
     def _get_detail_actions(self, employee):
         """Возвращает кнопки действий для диалога"""
         return [
-            ft.TextButton("Изменить фотографию", on_click=lambda e, emp=employee: self.change_photo(emp)),
-            ft.TextButton("Редактировать", on_click=lambda e, emp=employee: (self.close_detail_dialog(), self.show_edit_dialog(emp))),
-            ft.TextButton("Уволить", on_click=lambda e, emp=employee: (self.close_detail_dialog(), self.show_termination_dialog(emp)), style=ft.ButtonStyle(color=ft.Colors.RED)),
-            ft.TextButton("Закрыть", on_click=lambda e: self.close_detail_dialog())
+            ft.Container(height=10),
+            ft.Row([
+                ft.TextButton("Закрыть", on_click=lambda e: self.close_detail_dialog()),
+                ft.TextButton("Уволить", on_click=lambda e, emp=employee: (self.close_detail_dialog(), self.show_termination_dialog(emp)), style=ft.ButtonStyle(color=ft.Colors.RED)),
+                ft.TextButton("Редактировать", on_click=lambda e, emp=employee: (self.close_detail_dialog(), self.show_edit_dialog(emp))),
+                ft.TextButton("Изменить фотографию", on_click=lambda e, emp=employee: self.change_photo(emp))
+            ], alignment=ft.MainAxisAlignment.END)
         ]
     
     def close_detail_dialog(self):
@@ -162,7 +164,7 @@ class BaseEmployeePage(BasePage):
     def show_add_dialog(self, e):
         """Показывает диалог добавления"""
         self.add_dialog.title = ft.Text(self._get_add_title())
-        self.add_dialog.content = ft.Column(self._get_form_fields(), spacing=10)
+        self.add_dialog.content = ft.Column(self._get_form_fields(), spacing=15)
         self.add_dialog.actions = [
             ft.TextButton("Сохранить", on_click=self.save_employee),
             ft.TextButton("Отмена", on_click=self.close_add_dialog),
@@ -341,10 +343,31 @@ class BaseEmployeePage(BasePage):
     
 
     
-    def get_photo_widget(self, employee_name: str) -> ft.Control:
+    def get_photo_widget(self, employee) -> ft.Control:
         """Возвращает виджет с фотографией сотрудника"""
-        # Всегда создаем новый виджет для корректного обновления
-        return self.photo_manager.get_photo_widget(employee_name, self.open_pdf)
+        import base64
+        
+        if hasattr(employee, 'photo_base64') and employee.photo_base64:
+            try:
+                return ft.Image(
+                    src_base64=employee.photo_base64,
+                    width=150,
+                    height=200,
+                    fit=ft.ImageFit.COVER,
+                    border_radius=10
+                )
+            except:
+                pass
+        
+        # Если нет base64 фото, показываем заглушку
+        return ft.Container(
+            content=ft.Icon(ft.Icons.PERSON, size=100, color=ft.Colors.GREY),
+            width=150,
+            height=200,
+            bgcolor=ft.Colors.GREY_200,
+            border_radius=10,
+            alignment=ft.alignment.center
+        )
     
     def open_pdf(self, pdf_path):
         """Открывает PDF файл в системном приложении"""
@@ -362,76 +385,125 @@ class BaseEmployeePage(BasePage):
         except Exception as e:
             self.show_snackbar(f"Ошибка открытия PDF: {e}", True)
     
+    def open_base64_file(self, file_base64, filename):
+        """Открывает файл из base64"""
+        import base64
+        import tempfile
+        import os
+        from pathlib import Path
+        
+        try:
+            # Декодируем base64
+            file_data = base64.b64decode(file_base64)
+            
+            # Создаем временный файл
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=Path(filename).suffix)
+            temp_file.write(file_data)
+            temp_file.close()
+            temp_path = temp_file.name
+            
+            # Открываем файл
+            self.open_pdf(temp_path)
+            
+            # Удаляем временный файл через некоторое время
+            import threading
+            def cleanup():
+                import time
+                time.sleep(5)  # Ждем 5 секунд
+                try:
+                    os.unlink(temp_path)
+                except:
+                    pass
+            threading.Thread(target=cleanup, daemon=True).start()
+            
+        except Exception as e:
+            self.show_snackbar(f"Ошибка открытия файла: {e}", True)
+    
     def get_employee_folder_type(self):
         """Возвращает тип папки для сотрудника"""
         # Переопределяется в дочерних классах
         return "Сотрудник охраны"
     
     def save_personal_card(self, employee, file_path, company):
-        """Сохраняет личную карточку в правильную структуру папок"""
+        """Сохраняет личную карточку в base64"""
         from database.models import PersonalCard
         from datetime import date
-        import shutil
+        import base64
         from pathlib import Path
-        from PIL import Image
-        
-        # Создаем структуру папок
-        safe_name = "".join(c for c in employee.full_name if c.isalnum() or c in (' ', '-', '_')).strip().replace(' ', '_')
-        folder_type = self.get_employee_folder_type()
-        cards_folder = Path(f"storage/data/{folder_type}/{safe_name}/карточки")
-        cards_folder.mkdir(parents=True, exist_ok=True)
         
         source_file = Path(file_path)
-        card_count = PersonalCard.select().where(
-            (PersonalCard.guard_employee == employee) if hasattr(PersonalCard, 'guard_employee') else
-            (PersonalCard.chief_employee == employee) if hasattr(PersonalCard, 'chief_employee') else
-            False
-        ).count() + 1
         
-        # Конвертируем JPG в PNG
-        if source_file.suffix.lower() in ['.jpg', '.jpeg']:
-            dest_file = cards_folder / f"card_{card_count}.png"
-            try:
-                with Image.open(source_file) as img:
-                    img.save(dest_file, 'PNG')
-            except:
-                dest_file = cards_folder / f"card_{card_count}{source_file.suffix}"
-                shutil.copy2(source_file, dest_file)
-        else:
-            dest_file = cards_folder / f"card_{card_count}{source_file.suffix}"
-            shutil.copy2(source_file, dest_file)
+        # Читаем файл и конвертируем в base64
+        with open(source_file, 'rb') as f:
+            file_data = f.read()
         
-        # Создаем запись в БД с компанией
+        file_base64 = base64.b64encode(file_data).decode('utf-8')
+        
+        # Создаем запись в БД
         if hasattr(employee, 'guard_rank'):
-            PersonalCard.create(guard_employee=employee, company=company, issue_date=date.today(), photo_path=str(dest_file))
+            PersonalCard.create(
+                guard_employee=employee, 
+                company=company, 
+                issue_date=date.today(),
+                file_base64=file_base64,
+                filename=source_file.name
+            )
         else:
-            PersonalCard.create(chief_employee=employee, company=company, issue_date=date.today(), photo_path=str(dest_file))
+            PersonalCard.create(
+                chief_employee=employee, 
+                company=company, 
+                issue_date=date.today(),
+                file_base64=file_base64,
+                filename=source_file.name
+            )
         
-        return str(dest_file)
+        return True
     
     def change_photo(self, employee, photo_name=None, callback=None):
         """Изменение фотографии сотрудника"""
         def on_result(e: ft.FilePickerResultEvent):
             if e.files:
                 try:
-                    name = photo_name or employee.full_name
-                    photo_path = self.photo_manager.save_photo(name, e.files[0].path)
+                    import base64
+                    from PIL import Image
+                    import io
+                    
+                    # Читаем файл и конвертируем в base64
+                    with open(e.files[0].path, 'rb') as f:
+                        image_data = f.read()
+                    
+                    # Оптимизируем размер изображения
+                    try:
+                        img = Image.open(io.BytesIO(image_data))
+                        # Масштабируем до 300x400 максимум
+                        img.thumbnail((300, 400), Image.Resampling.LANCZOS)
+                        
+                        # Конвертируем в JPEG для уменьшения размера
+                        if img.mode in ('RGBA', 'LA', 'P'):
+                            img = img.convert('RGB')
+                        
+                        output = io.BytesIO()
+                        img.save(output, format='JPEG', quality=85, optimize=True)
+                        image_data = output.getvalue()
+                    except:
+                        pass  # Используем оригинальные данные
+                    
+                    # Конвертируем в base64
+                    photo_base64 = base64.b64encode(image_data).decode('utf-8')
                     
                     if callback:
-                        callback(photo_path)
+                        callback(photo_base64)
                     else:
-                        employee.photo_path = photo_path
+                        employee.photo_base64 = photo_base64
                         employee.save()
                     
                     self.show_snackbar("Фотография обновлена!")
                     
                     # Принудительно обновляем диалог
-                    # Закрываем все открытые диалоги
                     for dialog in self.page.overlay[:]:
                         if hasattr(dialog, 'open') and dialog.open:
                             dialog.open = False
                     self.page.update()
-                    # Открываем заново
                     self.show_basic_info_with_tabs(employee)
                     
                 except Exception as ex:
@@ -442,8 +514,8 @@ class BaseEmployeePage(BasePage):
             self.page.overlay.append(file_picker)
             self.page.update()
         file_picker.pick_files(
-            dialog_title="Выберите фотографию или PDF",
-            allowed_extensions=["jpg", "jpeg", "png", "bmp", "pdf"]
+            dialog_title="Выберите фотографию",
+            allowed_extensions=["jpg", "jpeg", "png", "bmp"]
         )
     
     def create_company_filter_dropdown(self):
@@ -811,10 +883,13 @@ class BaseEmployeePage(BasePage):
             title=ft.Text(f"Информация о сотруднике: {employee.full_name}"),
             content=tabs,
             actions=[
-                ft.TextButton("Изменить фотографию", on_click=lambda e: self.change_photo(employee)),
-                ft.TextButton("Редактировать", on_click=lambda e: self.show_edit_dialog(employee)),
-                ft.TextButton("Уволить", on_click=lambda e: self.show_termination_dialog(employee), style=ft.ButtonStyle(color=ft.Colors.RED)),
-                ft.TextButton("Закрыть", on_click=lambda e: setattr(tabs_dialog, 'open', False) or self.page.update())
+                ft.Container(height=10),
+                ft.Row([
+                    ft.TextButton("Изменить фотографию", on_click=lambda e: self.change_photo(employee)),
+                    ft.TextButton("Редактировать", on_click=lambda e: self.show_edit_dialog(employee)),                    
+                    ft.TextButton("Уволить", on_click=lambda e: self.show_termination_dialog(employee), style=ft.ButtonStyle(color=ft.Colors.RED)),
+                    ft.TextButton("Закрыть", on_click=lambda e: setattr(tabs_dialog, 'open', False) or self.page.update()),
+                ], alignment=ft.MainAxisAlignment.END)
             ],
             modal=True
         )
@@ -1058,64 +1133,45 @@ class BaseEmployeePage(BasePage):
     
     def save_document(self, employee, file_path, doc_name):
         from database.models import EmployeeDocument
-        import shutil
+        import base64
         from pathlib import Path
-        from PIL import Image
-        
-        safe_name = "".join(c for c in employee.full_name if c.isalnum() or c in (' ', '-', '_')).strip().replace(' ', '_')
-        folder_type = self.get_employee_folder_type()
-        docs_folder = Path(f"storage/data/{folder_type}/{safe_name}/документы")
-        docs_folder.mkdir(parents=True, exist_ok=True)
         
         source_file = Path(file_path)
         
-        # Определяем тип сотрудника для правильного подсчета
-        if hasattr(employee, 'guard_rank'):
-            doc_count = EmployeeDocument.select().where(EmployeeDocument.guard_employee == employee).count() + 1
-        else:
-            doc_count = EmployeeDocument.select().where(EmployeeDocument.chief_employee == employee).count() + 1
+        # Читаем файл и конвертируем в base64
+        with open(source_file, 'rb') as f:
+            file_data = f.read()
         
-        # Конвертируем JPG в PNG
-        if source_file.suffix.lower() in ['.jpg', '.jpeg']:
-            dest_file = docs_folder / f"doc_{doc_count}.png"
-            try:
-                with Image.open(source_file) as img:
-                    img.save(dest_file, 'PNG')
-            except:
-                dest_file = docs_folder / f"doc_{doc_count}{source_file.suffix}"
-                shutil.copy2(source_file, dest_file)
-        else:
-            dest_file = docs_folder / f"doc_{doc_count}{source_file.suffix}"
-            shutil.copy2(source_file, dest_file)
+        file_base64 = base64.b64encode(file_data).decode('utf-8')
         
-        # Создаем запись в БД в зависимости от типа сотрудника
+        # Создаем запись в БД
         if hasattr(employee, 'guard_rank'):
             EmployeeDocument.create(
                 guard_employee=employee,
                 document_type=doc_name,
-                page_number=1,
-                file_path=str(dest_file)
+                file_base64=file_base64,
+                filename=source_file.name
             )
         else:
             EmployeeDocument.create(
                 chief_employee=employee,
                 document_type=doc_name,
-                page_number=1,
-                file_path=str(dest_file)
+                file_base64=file_base64,
+                filename=source_file.name
             )
         
-        return str(dest_file)
+        return True
     
     def view_personal_card(self, card):
         """Просматривает личную карточку"""
-        if card.photo_path and os.path.exists(card.photo_path):
-            self.open_pdf(card.photo_path)
+        if hasattr(card, 'file_base64') and card.file_base64:
+            self.open_base64_file(card.file_base64, card.filename or 'card')
         else:
             self.show_snackbar("Файл не найден", True)
     
     def view_document(self, doc):
-        if doc.file_path and os.path.exists(doc.file_path):
-            self.open_pdf(doc.file_path)
+        if hasattr(doc, 'file_base64') and doc.file_base64:
+            self.open_base64_file(doc.file_base64, doc.filename or 'document')
         else:
             self.show_snackbar("Файл не найден", True)
     

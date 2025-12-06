@@ -50,7 +50,7 @@ class OfficeEmployeesPage(BaseEmployeePage):
         return [
             ft.Row([
                 ft.Column([
-                    self.get_photo_widget(employee.full_name),
+                    self.get_photo_widget(employee),
                     ft.Text(f"Дата рождения: {self.format_date(employee.birth_date)}", size=16),
                     ft.Text(f"Должность: {employee.position}", size=16),
                     ft.Text(f"Зарплата: {employee.salary} ₽", size=16),

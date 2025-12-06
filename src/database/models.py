@@ -45,6 +45,7 @@ class GuardEmployee(BaseModel):
     full_name = CharField(max_length=200, verbose_name="ФИО")
     birth_date = DateField(verbose_name="Дата рождения")
     photo_path = CharField(max_length=500, null=True, verbose_name="Путь к фото")
+    photo_base64 = TextField(null=True, verbose_name="Фото в base64")
     certificate_number = CharField(max_length=20, null=True, verbose_name="Номер удостоверения")
     termination_date = DateField(null=True, verbose_name="Дата увольнения")
     termination_reason = TextField(null=True, verbose_name="Причина увольнения")
@@ -88,6 +89,7 @@ class ChiefEmployee(BaseModel):
     full_name = CharField(max_length=200, verbose_name="ФИО")
     birth_date = DateField(verbose_name="Дата рождения")
     photo_path = CharField(max_length=500, null=True, verbose_name="Путь к фото")
+    photo_base64 = TextField(null=True, verbose_name="Фото в base64")
     position = CharField(max_length=100, verbose_name="Должность")
     guard_rank = CharField(max_length=10, null=True, verbose_name="Разряд охранника")
     termination_date = DateField(null=True, verbose_name="Дата увольнения")
@@ -109,6 +111,7 @@ class OfficeEmployee(BaseModel):
     full_name = CharField(max_length=200, verbose_name="ФИО")
     birth_date = DateField(verbose_name="Дата рождения")
     photo_path = CharField(max_length=500, null=True, verbose_name="Путь к фото")
+    photo_base64 = TextField(null=True, verbose_name="Фото в base64")
     position = CharField(max_length=100, verbose_name="Должность")
     termination_date = DateField(null=True, verbose_name="Дата увольнения")
     termination_reason = TextField(null=True, verbose_name="Причина увольнения")
@@ -167,10 +170,15 @@ class Assignment(BaseModel):
     deduction_amount = DecimalField(max_digits=7, decimal_places=2, default=0, verbose_name="Сумма удержания")
     bonus_amount = DecimalField(max_digits=7, decimal_places=2, default=0, verbose_name="Сумма премии")
     bonus_comment = TextField(null=True, verbose_name="Комментарий к премии")
+    comment = TextField(null=True, verbose_name="Комментарий")
     created_at = DateTimeField(default=datetime.now)
 
     class Meta:
         table_name = 'assignments'
+        indexes = (
+            (('date',), False),
+            (('employee', 'date'), False),
+        )
 
 class EmployeeCompany(BaseModel):
     """Модель связи сотрудник-компания"""
@@ -200,7 +208,8 @@ class PersonalCard(BaseModel):
     chief_employee = ForeignKeyField(ChiefEmployee, backref='personal_cards', on_delete='CASCADE', null=True)
     company = ForeignKeyField(Company, backref='personal_cards', on_delete='CASCADE')
     issue_date = DateField(verbose_name="Дата выдачи")
-    photo_path = CharField(max_length=500, null=True, verbose_name="Путь к фотографии карточки")
+    file_base64 = TextField(null=True, verbose_name="Файл в base64")
+    filename = CharField(max_length=255, null=True, verbose_name="Название файла")
     is_discarded = BooleanField(default=False, verbose_name="Списана")
     discarded_date = DateField(null=True, verbose_name="Дата списания")
     created_at = DateTimeField(default=datetime.now)
@@ -208,174 +217,125 @@ class PersonalCard(BaseModel):
     class Meta:
         table_name = 'personal_cards'
 
+class PersonalCardPhoto(BaseModel):
+    """Модель фотографий личных карточек"""
+    personal_card = ForeignKeyField(PersonalCard, backref='photos', on_delete='CASCADE')
+    photo_base64 = TextField(verbose_name="Фото в base64")
+    filename = CharField(max_length=255, verbose_name="Название файла")
+    created_at = DateTimeField(default=datetime.now)
+    
+    class Meta:
+        table_name = 'personal_card_photos'
+
 class EmployeeDocument(BaseModel):
     """Модель документов сотрудников"""
     guard_employee = ForeignKeyField(GuardEmployee, backref='documents', on_delete='CASCADE', null=True)
     chief_employee = ForeignKeyField(ChiefEmployee, backref='documents', on_delete='CASCADE', null=True)
-    document_type = CharField(max_length=50, verbose_name="Тип документа")  # Паспорт, Удостоверение, СНИЛС, Периодички
-    page_number = IntegerField(verbose_name="Номер страницы")
-    file_path = CharField(max_length=500, verbose_name="Путь к файлу")
+    office_employee = ForeignKeyField(OfficeEmployee, backref='documents', on_delete='CASCADE', null=True)
+    document_type = CharField(max_length=50, verbose_name="Тип документа")
+    file_base64 = TextField(null=True, verbose_name="Файл в base64")
+    filename = CharField(max_length=255, null=True, verbose_name="Название файла")
     created_at = DateTimeField(default=datetime.now)
     
     class Meta:
         table_name = 'employee_documents'
+
+class EmployeeDocumentPhoto(BaseModel):
+    """Модель фотографий документов"""
+    document = ForeignKeyField(EmployeeDocument, backref='photos', on_delete='CASCADE')
+    photo_base64 = TextField(verbose_name="Фото в base64")
+    filename = CharField(max_length=255, verbose_name="Название файла")
+    page_number = IntegerField(verbose_name="Номер страницы", default=1)
+    created_at = DateTimeField(default=datetime.now)
+    
+    class Meta:
+        table_name = 'employee_document_photos'
+
+class CashWithdrawal(BaseModel):
+    """Модель выхода за наличку (ВЗН)"""
+    employee = ForeignKeyField(GuardEmployee, backref='cash_withdrawals', on_delete='CASCADE')
+    object = ForeignKeyField(Object, backref='cash_withdrawals', on_delete='CASCADE')
+    chief = ForeignKeyField(ChiefEmployee, backref='supervised_cash_withdrawals', on_delete='SET NULL', null=True)
+    date = DateField(verbose_name="Дата ВЗН")
+    hours = IntegerField(verbose_name="Количество часов")
+    hourly_rate = DecimalField(max_digits=7, decimal_places=2, verbose_name="Почасовая ставка")
+    is_absent = BooleanField(default=False, verbose_name="Прогул")
+    absent_comment = TextField(null=True, verbose_name="Комментарий к прогулу")
+    deduction_amount = DecimalField(max_digits=7, decimal_places=2, default=0, verbose_name="Сумма удержания")
+    bonus_amount = DecimalField(max_digits=7, decimal_places=2, default=0, verbose_name="Сумма премии")
+    bonus_comment = TextField(null=True, verbose_name="Комментарий к премии")
+    comment = TextField(null=True, verbose_name="Комментарий")
+    created_at = DateTimeField(default=datetime.now)
+    
+    class Meta:
+        table_name = 'cash_withdrawals'
+        indexes = (
+            (('date',), False),
+            (('employee', 'date'), False),
+        )
 
 # Создание таблиц
 def init_database():
     """Инициализация базы данных"""
     try:
         db.connect()
-        db.create_tables([Company, GuardEmployee, ChiefEmployee, OfficeEmployee, EmployeeCompany, Settings, Object, ObjectAddress, ObjectRate, Assignment, ChiefObjectAssignment, PersonalCard, EmployeeDocument], safe=True)
+        db.create_tables([Company, GuardEmployee, ChiefEmployee, OfficeEmployee, EmployeeCompany, Settings, Object, ObjectAddress, ObjectRate, Assignment, ChiefObjectAssignment, PersonalCard, PersonalCardPhoto, EmployeeDocument, EmployeeDocumentPhoto, CashWithdrawal], safe=True)
         
         # Создаем компании по умолчанию
         for company_name in ["Легион", "Норд", "Росбезопасность"]:
             Company.get_or_create(name=company_name)
-        
-        # Миграция: добавляем столбец company если его нет
-        try:
-            db.execute_sql("ALTER TABLE guard_employees ADD COLUMN company VARCHAR(20) DEFAULT 'Легион'")
-        except:
-            pass  # Столбец уже существует
-        
-        try:
-            db.execute_sql("ALTER TABLE chief_employees ADD COLUMN company VARCHAR(20) DEFAULT 'Легион'")
-        except:
-            pass
-        
-        try:
-            db.execute_sql("ALTER TABLE office_employees ADD COLUMN company VARCHAR(20) DEFAULT 'Легион'")
-        except:
-            pass
-        
-        # Миграция: добавляем столбец chief_id в assignments
-        try:
-            db.execute_sql("ALTER TABLE assignments ADD COLUMN chief_id INTEGER")
-        except:
-            pass  # Столбец уже существует
-        
-        try:
-            db.execute_sql("ALTER TABLE assignments ADD CONSTRAINT fk_assignments_chief FOREIGN KEY (chief_id) REFERENCES chief_employees(id) ON DELETE SET NULL")
-        except:
-            pass  # Ограничение уже существует
-        
-        # Миграция: добавляем столбец photo_path в personal_cards
-        try:
-            db.execute_sql("ALTER TABLE personal_cards ADD COLUMN photo_path VARCHAR(500)")
-        except:
-            pass  # Столбец уже существует
-        
-        # Миграция: изменяем тип guard_rank на VARCHAR
-        try:
-            db.execute_sql("ALTER TABLE guard_employees ALTER COLUMN guard_rank TYPE VARCHAR(10)")
-        except:
-            pass  # Поле уже имеет нужный тип
-        
-        # Миграция: добавляем guard_rank для начальников
-        try:
-            db.execute_sql("ALTER TABLE chief_employees ADD COLUMN guard_rank VARCHAR(10)")
-        except:
-            pass  # Поле уже существует
-        
-        # Миграция: добавляем company_id для личных карточек
-        try:
-            db.execute_sql("ALTER TABLE personal_cards ADD COLUMN company_id INTEGER")
-        except:
-            pass  # Поле уже существует
-        
-        # Обновляем существующие карточки
-        try:
-            legion = Company.get(Company.name == "Легион")
-            db.execute_sql(f"UPDATE personal_cards SET company_id = {legion.id} WHERE company_id IS NULL")
-        except:
-            pass
-        
-        # Миграция: удаляем старые поля из objects
-        try:
-            db.execute_sql("ALTER TABLE objects DROP COLUMN IF EXISTS address")
-            db.execute_sql("ALTER TABLE objects DROP COLUMN IF EXISTS hourly_rate")
-        except:
-            pass
-        
-        # Миграция: добавляем поле is_discarded в personal_cards
-        try:
-            db.execute_sql("ALTER TABLE personal_cards ADD COLUMN is_discarded BOOLEAN DEFAULT FALSE")
-        except:
-            pass  # Поле уже существует
-        
-        # Миграция: добавляем поле discarded_date в personal_cards
-        try:
-            db.execute_sql("ALTER TABLE personal_cards ADD COLUMN discarded_date DATE")
-        except:
-            pass  # Поле уже существует
             
         # Создаем настройку темы по умолчанию
         try:
             Settings.get(Settings.key == "theme")
         except:
             Settings.create(key="theme", value="light")
-        
-        # Миграция: переносим старые данные о компаниях в новую структуру
-        migrate_company_data()
+            
+        # Миграция: добавляем поле комментария к сменам
+        try:
+            db.execute_sql("ALTER TABLE assignments ADD COLUMN comment TEXT")
+        except:
+            pass
+            
+        # Миграция: добавляем поля для ВЗН
+        try:
+            db.execute_sql("ALTER TABLE cash_withdrawals ADD COLUMN is_absent BOOLEAN DEFAULT FALSE")
+        except:
+            pass
+            
+        try:
+            db.execute_sql("ALTER TABLE cash_withdrawals ADD COLUMN absent_comment TEXT")
+        except:
+            pass
+            
+        try:
+            db.execute_sql("ALTER TABLE cash_withdrawals ADD COLUMN deduction_amount DECIMAL(7,2) DEFAULT 0")
+        except:
+            pass
+            
+        try:
+            db.execute_sql("ALTER TABLE cash_withdrawals ADD COLUMN bonus_amount DECIMAL(7,2) DEFAULT 0")
+        except:
+            pass
+            
+        try:
+            db.execute_sql("ALTER TABLE cash_withdrawals ADD COLUMN bonus_comment TEXT")
+        except:
+            pass
+            
+        # Создаем индексы для производительности
+        try:
+            db.execute_sql("CREATE INDEX IF NOT EXISTS idx_assignments_date ON assignments(date);")
+            db.execute_sql("CREATE INDEX IF NOT EXISTS idx_assignments_employee_date ON assignments(employee_id, date);")
+            db.execute_sql("CREATE INDEX IF NOT EXISTS idx_cash_withdrawals_date ON cash_withdrawals(date);")
+            db.execute_sql("CREATE INDEX IF NOT EXISTS idx_cash_withdrawals_employee_date ON cash_withdrawals(employee_id, date);")
+        except:
+            pass
             
     except Exception as e:
         print(f"Ошибка подключения к PostgreSQL: {e}")
         print("Убедитесь, что PostgreSQL запущен и настройки подключения корректны")
         raise
-
-def migrate_company_data():
-    """Миграция старых данных о компаниях"""
-    try:
-        # Проверяем, есть ли старое поле company
-        cursor = db.execute_sql("SELECT column_name FROM information_schema.columns WHERE table_name='guard_employees' AND column_name='company'")
-        if cursor.fetchone():
-            # Мигрируем данные для GuardEmployee
-            for employee in GuardEmployee.select():
-                if hasattr(employee, 'company') and employee.company:
-                    try:
-                        company = Company.get(Company.name == employee.company)
-                        EmployeeCompany.get_or_create(guard_employee=employee, company=company)
-                    except:
-                        pass
-        
-        # Мигрируем ChiefEmployee
-        cursor = db.execute_sql("SELECT column_name FROM information_schema.columns WHERE table_name='chief_employees' AND column_name='company'")
-        if cursor.fetchone():
-            for employee in ChiefEmployee.select():
-                if hasattr(employee, 'company') and employee.company:
-                    try:
-                        company = Company.get(Company.name == employee.company)
-                        EmployeeCompany.get_or_create(chief_employee=employee, company=company)
-                    except:
-                        pass
-        
-        # Мигрируем OfficeEmployee
-        cursor = db.execute_sql("SELECT column_name FROM information_schema.columns WHERE table_name='office_employees' AND column_name='company'")
-        if cursor.fetchone():
-            for employee in OfficeEmployee.select():
-                if hasattr(employee, 'company') and employee.company:
-                    try:
-                        company = Company.get(Company.name == employee.company)
-                        EmployeeCompany.get_or_create(office_employee=employee, company=company)
-                    except:
-                        pass
-        
-        # Для сотрудников без компаний назначаем Легион
-        legion = Company.get(Company.name == "Легион")
-        
-        for employee in GuardEmployee.select():
-            if not EmployeeCompany.select().where(EmployeeCompany.guard_employee == employee).exists():
-                EmployeeCompany.create(guard_employee=employee, company=legion)
-        
-        for employee in ChiefEmployee.select():
-            if not EmployeeCompany.select().where(EmployeeCompany.chief_employee == employee).exists():
-                EmployeeCompany.create(chief_employee=employee, company=legion)
-        
-        for employee in OfficeEmployee.select():
-            if not EmployeeCompany.select().where(EmployeeCompany.office_employee == employee).exists():
-                EmployeeCompany.create(office_employee=employee, company=legion)
-                
-    except Exception as e:
-        print(f"Ошибка миграции: {e}")
 
 # Инициализируем базу данных при импорте
 if __name__ != '__main__':

@@ -151,13 +151,22 @@ def export_to_excel(data, filename):
     
     wb.save(filename)
 
-def export_assignments_to_excel():
-    """Экспортирует все назначения в Excel файлы по объектам"""
+def export_assignments_to_excel(month=None, year=None):
+    """Экспортирует назначения за указанный месяц в Excel файлы по объектам"""
     try:
         if db.is_closed():
             db.connect()
         
-        assignments = Assignment.select(Assignment, Employee, Object).join(Employee).switch(Assignment).join(Object)
+        # Если месяц и год не указаны, используем текущие
+        if month is None or year is None:
+            current_date = datetime.now()
+            month = current_date.month
+            year = current_date.year
+        
+        # Фильтруем назначения по месяцу и году
+        assignments = Assignment.select(Assignment, Employee, Object).join(Employee).switch(Assignment).join(Object).where(
+            (Assignment.date.year == year) & (Assignment.date.month == month)
+        )
         
         if not assignments.exists():
             return False, "Нет данных для экспорта. Добавьте сотрудников и назначения."
@@ -204,13 +213,12 @@ def export_assignments_to_excel():
                     'итого_на_руки': final_salary if payment_method == 'на руки' else 0
                 })
         
-        current_date = datetime.now()
         month_names = {
             1: 'Январь', 2: 'Февраль', 3: 'Март', 4: 'Апрель',
             5: 'Май', 6: 'Июнь', 7: 'Июль', 8: 'Август',
             9: 'Сентябрь', 10: 'Октябрь', 11: 'Ноябрь', 12: 'Декабрь'
         }
-        month_name = month_names[current_date.month]
+        month_name = month_names[month]
         
         for obj_name, rows in objects_data.items():
             try:
@@ -231,11 +239,11 @@ def export_assignments_to_excel():
                 }
             }
             
-            filename = f"{obj_name} {month_name} {current_date.year}.xlsx"
+            filename = f"{obj_name} {month_name} {year}.xlsx"
             filepath = os.path.join(os.path.expanduser('~'), 'Downloads', filename)
             export_to_excel(data, filepath)
         
-        return True, f"Данные экспортированы в Downloads"
+        return True, f"Данные экспортированы в Загрузки"
         
     except Exception as ex:
         return False, f"Ошибка экспорта: {str(ex)}"

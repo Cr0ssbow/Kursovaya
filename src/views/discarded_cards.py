@@ -77,9 +77,6 @@ def discarded_cards_page(page: ft.Page = None):
         try:
             if db.is_closed():
                 db.connect()
-            # Удаляем файл если существует
-            if card.photo_path and os.path.exists(card.photo_path):
-                os.remove(card.photo_path)
             card.delete_instance()
             close_actions_dialog()
             refresh_list()
@@ -91,18 +88,24 @@ def discarded_cards_page(page: ft.Page = None):
     
     def view_card(card):
         """Просматривает карточку"""
-        if card.photo_path and os.path.exists(card.photo_path):
-            import subprocess
-            import platform
-            try:
-                if platform.system() == 'Windows':
-                    os.startfile(card.photo_path)
-                elif platform.system() == 'Darwin':  # macOS
-                    subprocess.run(['open', card.photo_path])
-                else:  # Linux
-                    subprocess.run(['xdg-open', card.photo_path])
-            except Exception as e:
-                print(f"Ошибка открытия файла: {e}")
+        if hasattr(card, 'file_base64') and card.file_base64:
+            # Показываем изображение в диалоге
+            image_dialog = ft.AlertDialog(
+                title=ft.Text(f"Просмотр карточки"),
+                content=ft.Image(
+                    src_base64=card.file_base64,
+                    width=600,
+                    height=800,
+                    fit=ft.ImageFit.CONTAIN
+                ),
+                actions=[ft.TextButton("Закрыть", on_click=lambda e: setattr(image_dialog, 'open', False) or page.update())],
+                modal=True
+            )
+            page.overlay.append(image_dialog)
+            image_dialog.open = True
+            page.update()
+        else:
+            print("Файл не найден")
     
     def format_date(date):
         """Форматирует дату в строку дд.мм.гггг"""
