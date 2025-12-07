@@ -127,6 +127,30 @@ class OfficeEmployee(BaseModel):
 # Для обратной совместимости
 Employee = GuardEmployee
 
+class Role(BaseModel):
+    """Модель роли пользователя"""
+    name = CharField(max_length=50, unique=True, verbose_name="Название роли")
+    description = TextField(null=True, verbose_name="Описание")
+    created_at = DateTimeField(default=datetime.now)
+    
+    class Meta:
+        table_name = 'roles'
+
+class User(BaseModel):
+    """Модель пользователя для авторизации"""
+    username = CharField(max_length=50, unique=True, verbose_name="Логин")
+    password_hash = CharField(max_length=255, verbose_name="Хеш пароля")
+    role = CharField(max_length=20, default="user", verbose_name="Роль")
+    guard_employee = ForeignKeyField(GuardEmployee, null=True, backref='user_account')
+    chief_employee = ForeignKeyField(ChiefEmployee, null=True, backref='user_account')
+    office_employee = ForeignKeyField(OfficeEmployee, null=True, backref='user_account')
+    allowed_pages = TextField(default="home", verbose_name="Доступные страницы")
+    is_active = BooleanField(default=True, verbose_name="Активен")
+    created_at = DateTimeField(default=datetime.now)
+    
+    class Meta:
+        table_name = 'users'
+
 class Object(BaseModel):
     """Модель объекта"""
     name = CharField(max_length=200, unique=True, verbose_name="Название объекта")
@@ -279,7 +303,7 @@ def init_database():
     """Инициализация базы данных"""
     try:
         db.connect()
-        db.create_tables([Company, GuardEmployee, ChiefEmployee, OfficeEmployee, EmployeeCompany, Settings, Object, ObjectAddress, ObjectRate, Assignment, ChiefObjectAssignment, PersonalCard, PersonalCardPhoto, EmployeeDocument, EmployeeDocumentPhoto, CashWithdrawal], safe=True)
+        db.create_tables([Company, GuardEmployee, ChiefEmployee, OfficeEmployee, EmployeeCompany, Settings, User, Object, ObjectAddress, ObjectRate, Assignment, ChiefObjectAssignment, PersonalCard, PersonalCardPhoto, EmployeeDocument, EmployeeDocumentPhoto, CashWithdrawal], safe=True)
         
         # Создаем компании по умолчанию
         for company_name in ["Легион", "Норд", "Росбезопасность"]:
@@ -290,6 +314,13 @@ def init_database():
             Settings.get(Settings.key == "theme")
         except:
             Settings.create(key="theme", value="light")
+            
+        # Создаем роли по умолчанию
+        try:
+            Role.get_or_create(name="Admin", defaults={'description': 'Администратор системы'})
+            Role.get_or_create(name="user", defaults={'description': 'Обычный пользователь'})
+        except Exception as role_error:
+            print(f"Ошибка создания ролей: {role_error}")
             
         # Миграция: добавляем поле комментария к сменам
         try:

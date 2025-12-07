@@ -1,73 +1,51 @@
 import flet as ft
 from peewee import *
 
-def drawer(on_change_handler):
-    """Создаёт navigation drawer с обработчиком событий"""
+def drawer(on_change_handler, auth_manager=None):
+    """Создаёт navigation drawer с обработчиком событий и проверкой доступа"""
+    
+    # Все пункты меню с их названиями страниц
+    menu_items = [
+        ("home", "Домашняя страница", ft.Icons.HOME, ft.Icons.HOME_OUTLINED),
+        ("settings", "Настройки", ft.Icons.SETTINGS, ft.Icons.SETTINGS_OUTLINED),
+        ("employees", "Сотрудники охраны", ft.Icons.SECURITY, ft.Icons.SECURITY_OUTLINED),
+        ("chief_employees", "Начальники охраны", ft.Icons.SUPERVISOR_ACCOUNT, ft.Icons.SUPERVISOR_ACCOUNT_OUTLINED),
+        ("office_employees", "Сотрудники офиса", ft.Icons.WORK, ft.Icons.WORK_OUTLINED),
+        ("objects", "Объекты", ft.Icons.BUSINESS, ft.Icons.BUSINESS_OUTLINED),
+        ("calendar", "Календарь смен", ft.Icons.SCHEDULE, ft.Icons.SCHEDULE_OUTLINED),
+        ("statistics", "Статистика", ft.Icons.BAR_CHART, ft.Icons.BAR_CHART_OUTLINED),
+        ("notes", "Заметки", ft.Icons.NOTE, ft.Icons.NOTE_OUTLINED),
+        ("terminated", "Уволенные сотрудники", ft.Icons.PERSON_OFF, ft.Icons.PERSON_OFF_OUTLINED),
+        ("discarded_cards", "Списанные карточки", ft.Icons.CREDIT_CARD_OFF, ft.Icons.CREDIT_CARD_OFF_OUTLINED),
+        ("administration", "Администрирование", ft.Icons.ADMIN_PANEL_SETTINGS, ft.Icons.ADMIN_PANEL_SETTINGS_OUTLINED)
+    ]
+    
+    # Фильтруем пункты меню по доступу
+    allowed_items = []
+    for page_name, label, icon, selected_icon in menu_items:
+        if not auth_manager or auth_manager.has_page_access(page_name):
+            allowed_items.append((page_name, label, icon, selected_icon))
+    
+    # Сохраняем маппинг как атрибут функции
+    on_change_handler.page_mapping = {i: page_name for i, (page_name, _, _, _) in enumerate(allowed_items)}
+    print(f"Маппинг страниц: {on_change_handler.page_mapping}")
+    
+    controls = [ft.Container(height=12)]
+    
+    for i, (page_name, label, icon, selected_icon) in enumerate(allowed_items):
+        # Добавляем разделитель перед настройками и администрированием
+        if page_name == "settings" or page_name == "administration":
+            controls.append(ft.Divider(thickness=2))
+            
+        controls.append(
+            ft.NavigationDrawerDestination(
+                label=label,
+                icon=icon,
+                selected_icon=selected_icon,
+            )
+        )
+    
     return ft.NavigationDrawer(
-        on_change=on_change_handler,  # Добавлен обработчик события
-        controls=[
-            ft.Container(height=12),
-            ft.NavigationDrawerDestination(
-                label="Домашняя страница",
-                icon=ft.Icons.HOME,
-                selected_icon=ft.Icon(ft.Icons.HOME_OUTLINED),
-            ),
-            ft.Divider(thickness=2),
-            ft.NavigationDrawerDestination(
-                icon=ft.Icon(ft.Icons.SETTINGS),
-                label="Настройки",
-                selected_icon=ft.Icons.SETTINGS_OUTLINED,
-            ),
-            ft.NavigationDrawerDestination(
-                icon=ft.Icon(ft.Icons.SECURITY),
-                label="Сотрудники охраны",
-                selected_icon=ft.Icons.SECURITY_OUTLINED,
-            ),
-            ft.NavigationDrawerDestination(
-                icon=ft.Icon(ft.Icons.SUPERVISOR_ACCOUNT),
-                label="Начальники охраны",
-                selected_icon=ft.Icons.SUPERVISOR_ACCOUNT_OUTLINED,
-            ),
-            ft.NavigationDrawerDestination(
-                icon=ft.Icon(ft.Icons.WORK),
-                label="Сотрудники офиса",
-                selected_icon=ft.Icons.WORK_OUTLINED,
-            ),
-            ft.NavigationDrawerDestination(
-                icon=ft.Icon(ft.Icons.BUSINESS),
-                label="Объекты",
-                selected_icon=ft.Icons.BUSINESS_OUTLINED,
-            ),
-            ft.NavigationDrawerDestination(
-                icon=ft.Icon(ft.Icons.SCHEDULE),
-                label="Календарь смен",
-                selected_icon=ft.Icons.SCHEDULE_OUTLINED,
-            ),
-            ft.NavigationDrawerDestination(
-                icon=ft.Icon(ft.Icons.BAR_CHART),
-                label="Статистика",
-                selected_icon=ft.Icons.BAR_CHART_OUTLINED,
-            ),
-            ft.NavigationDrawerDestination(
-                icon=ft.Icon(ft.Icons.NOTE),
-                label="Заметки",
-                selected_icon=ft.Icons.NOTE_OUTLINED,
-            ),
-            ft.NavigationDrawerDestination(
-                icon=ft.Icon(ft.Icons.PERSON_OFF),
-                label="Уволенные сотрудники",
-                selected_icon=ft.Icons.PERSON_OFF_OUTLINED,
-            ),
-            ft.NavigationDrawerDestination(
-                icon=ft.Icon(ft.Icons.CREDIT_CARD_OFF),
-                label="Списанные карточки",
-                selected_icon=ft.Icons.CREDIT_CARD_OFF_OUTLINED,
-            ),
-            ft.Divider(thickness=2),
-            ft.NavigationDrawerDestination(
-                icon=ft.Icon(ft.Icons.ADMIN_PANEL_SETTINGS),
-                label="Администрирование",
-                selected_icon=ft.Icons.ADMIN_PANEL_SETTINGS_OUTLINED,
-            ),
-        ],
+        on_change=on_change_handler,
+        controls=controls,
     )

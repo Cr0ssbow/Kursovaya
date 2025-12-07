@@ -29,7 +29,11 @@ def home_page(page: ft.Page = None) -> ft.Column:
                     if search_query and search_query.lower() not in employee.full_name.lower():
                         continue
                     # УЧО действует 5 лет
-                    expiry_date = employee.guard_license_date.replace(year=employee.guard_license_date.year + 5)
+                    try:
+                        expiry_date = employee.guard_license_date.replace(year=employee.guard_license_date.year + 5)
+                    except ValueError:
+                        # Обработка 29 февраля в невисокосном году
+                        expiry_date = employee.guard_license_date.replace(year=employee.guard_license_date.year + 5, day=28)
                     days_left = (expiry_date - today).days
                     if days_left <= 90:  # Показываем истёкшие и истекающие в течение 90 дней
                         expiring.append((employee.full_name, expiry_date, days_left))
@@ -59,7 +63,11 @@ def home_page(page: ft.Page = None) -> ft.Column:
                     if search_query and search_query.lower() not in employee.full_name.lower():
                         continue
                     # Медкомиссия действует 1 год
-                    expiry_date = employee.medical_exam_date.replace(year=employee.medical_exam_date.year + 1)
+                    try:
+                        expiry_date = employee.medical_exam_date.replace(year=employee.medical_exam_date.year + 1)
+                    except ValueError:
+                        # Обработка 29 февраля в невисокосном году
+                        expiry_date = employee.medical_exam_date.replace(year=employee.medical_exam_date.year + 1, day=28)
                     days_left = (expiry_date - today).days
                     if days_left <= 60:  # Показываем истёкшие и истекающие в течение 60 дней
                         expiring.append((employee.full_name, expiry_date, days_left))
@@ -89,7 +97,11 @@ def home_page(page: ft.Page = None) -> ft.Column:
                     if search_query and search_query.lower() not in employee.full_name.lower():
                         continue
                     # Периодическая проверка действует 1 год
-                    expiry_date = employee.periodic_check_date.replace(year=employee.periodic_check_date.year + 1)
+                    try:
+                        expiry_date = employee.periodic_check_date.replace(year=employee.periodic_check_date.year + 1)
+                    except ValueError:
+                        # Обработка 29 февраля в невисокосном году
+                        expiry_date = employee.periodic_check_date.replace(year=employee.periodic_check_date.year + 1, day=28)
                     days_left = (expiry_date - today).days
                     if days_left <= 30:  # Показываем истёкшие и истекающие в течение 30 дней
                         expiring.append((employee.full_name, expiry_date, days_left))
@@ -117,11 +129,19 @@ def home_page(page: ft.Page = None) -> ft.Column:
                 if search_query and search_query.lower() not in employee.full_name.lower():
                     continue
                 # Создаем дату дня рождения в текущем году
-                birthday_this_year = employee.birth_date.replace(year=today.year)
+                try:
+                    birthday_this_year = employee.birth_date.replace(year=today.year)
+                except ValueError:
+                    # Обработка 29 февраля в невисокосном году
+                    birthday_this_year = employee.birth_date.replace(year=today.year, day=28)
                 
                 # Если день рождения уже прошел в этом году, берем следующий год
                 if birthday_this_year < today:
-                    birthday_this_year = birthday_this_year.replace(year=today.year + 1)
+                    try:
+                        birthday_this_year = birthday_this_year.replace(year=today.year + 1)
+                    except ValueError:
+                        # Обработка 29 февраля в невисокосном году
+                        birthday_this_year = birthday_this_year.replace(year=today.year + 1, day=28)
                 
                 # Проверяем, попадает ли в ближайшие 7 дней
                 days_until = (birthday_this_year - today).days

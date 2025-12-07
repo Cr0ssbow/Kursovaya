@@ -315,13 +315,7 @@ def settings_page(page: ft.Page) -> ft.Column:
                 icon=ft.Icons.FILE_DOWNLOAD,
                 on_click=import_to_excel,
             ),
-            ft.Divider(),
-            ft.Text("Управление компаниями"),
-            ft.ElevatedButton(
-                "Управление компаниями",
-                icon=ft.Icons.BUSINESS,
-                on_click=lambda e: manage_companies_dialog(page),
-            ),
+
         ],
         spacing=10,
         expand=True,
