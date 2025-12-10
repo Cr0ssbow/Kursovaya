@@ -1,5 +1,6 @@
 import flet as ft
 from database.models import Object, ObjectAddress, ObjectRate, db
+from excel_export import export_assignments_to_excel
 
 def objects_page(page: ft.Page = None):
     search_value = ""
@@ -46,6 +47,11 @@ def objects_page(page: ft.Page = None):
                 raise ValueError("Название объекта обязательно!")
             with db.atomic():
                 Object.create(name=name, description=description)
+            
+            # Логирование
+            if hasattr(page, 'auth_manager'):
+                page.auth_manager.log_action("Создание объекта", f"Создан объект: {name}")
+            
             close_add_dialog(e)
             refresh_list()
             if page:
@@ -89,7 +95,13 @@ def objects_page(page: ft.Page = None):
             page.update()
 
     def delete_object(obj):
+        object_name = obj.name
         obj.delete_instance()
+        
+        # Логирование
+        if hasattr(page, 'auth_manager'):
+            page.auth_manager.log_action("Удаление объекта", f"Удален объект: {object_name}")
+        
         close_confirm_delete_dialog()
         close_edit_dialog(None)
         refresh_list()
@@ -216,9 +228,15 @@ def objects_page(page: ft.Page = None):
                 raise ValueError("Название объекта обязательно!")
             with db.atomic():
                 object_to_update = Object.get_by_id(object_id)
+                old_name = object_to_update.name
                 object_to_update.name = new_name
                 object_to_update.description = new_description
                 object_to_update.save()
+            
+            # Логирование
+            if hasattr(page, 'auth_manager'):
+                page.auth_manager.log_action("Редактирование объекта", f"Отредактирован объект: {old_name} -> {new_name}")
+            
             close_edit_dialog(None)
             refresh_list()
             if page:
@@ -337,6 +355,77 @@ def objects_page(page: ft.Page = None):
         if page:
             page.update()
     
+    def import_to_excel():
+        from datetime import datetime, date
+        
+        # Создаем список месяцев
+        months = [
+            "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
+            "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
+        ]
+        
+        current_date = date.today()
+        current_month = current_date.month
+        current_year = current_date.year
+        
+        month_dropdown = ft.Dropdown(
+            label="Выберите месяц",
+            width=200,
+            value=str(current_month),
+            options=[ft.dropdown.Option(str(i), months[i-1]) for i in range(1, 13)]
+        )
+        
+        year_field = ft.TextField(
+            label="Год",
+            width=100,
+            value=str(current_year)
+        )
+        
+        def export_excel(e):
+            try:
+                month = int(month_dropdown.value)
+                year = int(year_field.value)
+                
+                success, message = export_assignments_to_excel(month, year)
+                
+                export_dialog.open = False
+                page.update()
+                
+                snack = ft.SnackBar(
+                    content=ft.Text(message),
+                    bgcolor=ft.Colors.GREEN if success else ft.Colors.RED,
+                    duration=3000 if success else 5000
+                )
+                page.overlay.append(snack)
+                snack.open = True
+                page.update()
+                
+            except ValueError:
+                snack = ft.SnackBar(
+                    content=ft.Text("Неверный формат года!"),
+                    bgcolor=ft.Colors.RED
+                )
+                page.overlay.append(snack)
+                snack.open = True
+                page.update()
+        
+        export_dialog = ft.AlertDialog(
+            title=ft.Text("Экспорт в Excel"),
+            content=ft.Column([
+                ft.Text("Выберите месяц и год для экспорта:"),
+                ft.Row([month_dropdown, year_field], spacing=10)
+            ], height=120, width=300),
+            actions=[
+                ft.TextButton("Экспорт", on_click=export_excel),
+                ft.TextButton("Отмена", on_click=lambda e: setattr(export_dialog, 'open', False) or page.update())
+            ],
+            modal=True
+        )
+        
+        page.overlay.append(export_dialog)
+        export_dialog.open = True
+        page.update()
+    
     refresh_list()
     
     return ft.Column(
@@ -344,11 +433,18 @@ def objects_page(page: ft.Page = None):
             ft.Row(
                 [
                     ft.Text("Объекты", size=24, weight="bold"),
-                    ft.ElevatedButton(
-                        "Добавить объект",
-                        icon=ft.Icons.ADD,
-                        on_click=show_add_dialog,
-                    ),
+                    ft.Row([
+                        ft.ElevatedButton(
+                            "Добавить объект",
+                            icon=ft.Icons.ADD,
+                            on_click=show_add_dialog,
+                        ),
+                        ft.ElevatedButton(
+                            "Экспорт в Excel",
+                            icon=ft.Icons.FILE_DOWNLOAD,
+                            on_click=lambda e: import_to_excel(),
+                        ),
+                    ], spacing=10)
                 ],
                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
             ),

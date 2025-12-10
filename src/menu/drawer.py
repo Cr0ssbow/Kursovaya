@@ -17,7 +17,8 @@ def drawer(on_change_handler, auth_manager=None):
         ("notes", "Заметки", ft.Icons.NOTE, ft.Icons.NOTE_OUTLINED),
         ("terminated", "Уволенные сотрудники", ft.Icons.PERSON_OFF, ft.Icons.PERSON_OFF_OUTLINED),
         ("discarded_cards", "Списанные карточки", ft.Icons.CREDIT_CARD_OFF, ft.Icons.CREDIT_CARD_OFF_OUTLINED),
-        ("administration", "Администрирование", ft.Icons.ADMIN_PANEL_SETTINGS, ft.Icons.ADMIN_PANEL_SETTINGS_OUTLINED)
+        ("administration", "Администрирование", ft.Icons.ADMIN_PANEL_SETTINGS, ft.Icons.ADMIN_PANEL_SETTINGS_OUTLINED),
+        ("logs", "Логи действий", ft.Icons.HISTORY, ft.Icons.HISTORY_OUTLINED)
     ]
     
     # Фильтруем пункты меню по доступу
@@ -28,7 +29,6 @@ def drawer(on_change_handler, auth_manager=None):
     
     # Сохраняем маппинг как атрибут функции
     on_change_handler.page_mapping = {i: page_name for i, (page_name, _, _, _) in enumerate(allowed_items)}
-    print(f"Маппинг страниц: {on_change_handler.page_mapping}")
     
     controls = [ft.Container(height=12)]
     

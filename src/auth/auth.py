@@ -1,14 +1,16 @@
-import hashlib
 import flet as ft
-from database.models import User, Role, db, GuardEmployee, ChiefEmployee, OfficeEmployee
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
+from database.models import User, Role, UserLog, db, GuardEmployee, ChiefEmployee, OfficeEmployee
 
 class AuthManager:
     def __init__(self):
         self.current_user = None
+        self.ph = PasswordHasher()
         self._create_default_admin()
     
     def _hash_password(self, password: str) -> str:
-        return hashlib.sha256(password.encode()).hexdigest()
+        return self.ph.hash(password)
     
     def _create_default_admin(self):
         """Создает администратора по умолчанию"""
@@ -16,22 +18,32 @@ class AuthManager:
             if db.is_closed():
                 db.connect()
             
-            all_pages = "home,settings,employees,chief_employees,office_employees,objects,calendar,statistics,notes,terminated,discarded_cards,administration"
+            all_pages = "home,settings,employees,chief_employees,office_employees,objects,calendar,statistics,notes,terminated,discarded_cards,logs,administration"
             
             if not User.select().exists():
+                import os
+                admin_password = os.getenv('ADMIN_PASSWORD', 'Admin')
                 User.create(
                     username="Admin",
-                    password_hash=self._hash_password("Admin"),
+                    password_hash=self._hash_password(admin_password),
                     role="Admin",
                     allowed_pages=all_pages
                 )
             else:
                 # Обновляем существующих администраторов
                 for admin in User.select().where((User.role == "Admin") | (User.role == "admin")):
-                    if not admin.allowed_pages or admin.allowed_pages == "home" or len(admin.allowed_pages.split(',')) < 5:
+                    if not admin.allowed_pages or admin.allowed_pages == "home" or len(admin.allowed_pages.split(',')) < 10:
                         admin.allowed_pages = all_pages
                         admin.save()
-                        print(f"Обновлен администратор: {admin.username}")
+                
+                # Обновляем обычных пользователей, добавляя доступ к настройкам
+                for user in User.select().where(User.role != "Admin"):
+                    if user.allowed_pages and "settings" not in user.allowed_pages:
+                        if user.allowed_pages == "home":
+                            user.allowed_pages = "home,settings"
+                        else:
+                            user.allowed_pages = user.allowed_pages + ",settings"
+                        user.save()
         except Exception as e:
             print(f"Ошибка создания администратора: {e}")
         finally:
@@ -44,13 +56,17 @@ class AuthManager:
             if db.is_closed():
                 db.connect()
             
-            user = User.get(
-                (User.username == username) & 
-                (User.password_hash == self._hash_password(password)) &
-                (User.is_active == True)
-            )
-            self.current_user = user
-            return True
+            user = User.get((User.username == username) & (User.is_active == True))
+            
+            # Проверяем пароль с Argon2
+            try:
+                self.ph.verify(user.password_hash, password)
+                self.current_user = user
+                self.log_action("Вход в систему", f"Пользователь {username} вошел в систему")
+                return True
+            except VerifyMismatchError:
+                return False
+                
         except User.DoesNotExist:
             return False
         except Exception as e:
@@ -62,6 +78,8 @@ class AuthManager:
     
     def logout(self):
         """Выход из системы"""
+        if self.current_user:
+            self.log_action("Выход из системы", f"Пользователь {self.current_user.username} вышел из системы")
         self.current_user = None
     
     def is_authenticated(self) -> bool:
@@ -72,7 +90,7 @@ class AuthManager:
         """Проверка роли пользователя"""
         return self.current_user and self.current_user.role == role
     
-    def create_user(self, username: str, password: str, role: str = "user", employee_id: int = None, employee_type: str = None, allowed_pages: str = "home") -> bool:
+    def create_user(self, username: str, password: str, role: str = "user", employee_id: int = None, employee_type: str = None, allowed_pages: str = "home,settings") -> bool:
         """Создание нового пользователя"""
         try:
             if db.is_closed():
@@ -94,6 +112,7 @@ class AuthManager:
                     user_data['office_employee'] = employee_id
             
             User.create(**user_data)
+            self.log_action("Создание пользователя", f"Создан пользователь {username}")
             return True
         except Exception as e:
             print(f"Ошибка создания пользователя: {e}")
@@ -154,7 +173,9 @@ class AuthManager:
             
             user = User.get_by_id(user_id)
             if user.username != "Admin":  # Защита от удаления админа
+                username = user.username
                 user.delete_instance()
+                self.log_action("Удаление пользователя", f"Удален пользователь {username}")
                 return True
             return False
         except Exception as e:
@@ -255,6 +276,28 @@ class AuthManager:
         except Exception as e:
             print(f"Ошибка удаления роли: {e}")
             return False
+        finally:
+            if not db.is_closed():
+                db.close()
+    
+    def log_action(self, action: str, description: str = None):
+        """Логирование действий пользователя"""
+        print(f"Попытка логирования: {action}, {description}")
+        if not self.current_user:
+            print("Нет текущего пользователя")
+            return
+        
+        try:
+            if db.is_closed():
+                db.connect()
+            UserLog.create(
+                user=self.current_user,
+                action=action,
+                description=description
+            )
+            print(f"Лог успешно создан: {action}")
+        except Exception as e:
+            print(f"Ошибка логирования: {e}")
         finally:
             if not db.is_closed():
                 db.close()

@@ -1,6 +1,7 @@
 import flet as ft
 from views.settings import manage_companies_dialog
 from auth.auth import AuthManager
+from utils.log_cleaner import cleanup_old_logs, get_logs_statistics
 
 def administration_page(page: ft.Page = None):
     """Страница администрирования"""
@@ -117,6 +118,7 @@ def administration_page(page: ft.Page = None):
                 ("notes", "Заметки"),
                 ("terminated", "Уволенные"),
                 ("discarded_cards", "Списанные карточки"),
+                ("logs", "Логи действий"),
                 ("administration", "Администрирование")
             ]
             
@@ -218,6 +220,7 @@ def administration_page(page: ft.Page = None):
                 ("notes", "Заметки"),
                 ("terminated", "Уволенные"),
                 ("discarded_cards", "Списанные карточки"),
+                ("logs", "Логи действий"),
                 ("administration", "Администрирование")
             ]
             
@@ -348,6 +351,90 @@ def administration_page(page: ft.Page = None):
         refresh_roles()
         page.open(dialog)
     
+    def manage_logs_dialog(e):
+        """Диалог управления логами"""
+        stats_text = ft.Text("", size=14)
+        
+        def refresh_stats():
+            stats = get_logs_statistics()
+            stats_info = [
+                f"Всего записей в логах: {stats['total_logs']}",
+                f"Записей за последние 30 дней: {stats['recent_logs']}"
+            ]
+            
+            if stats['oldest_date']:
+                stats_info.append(f"Самая старая запись: {stats['oldest_date'].strftime('%d.%m.%Y %H:%M:%S')}")
+            if stats['newest_date']:
+                stats_info.append(f"Самая новая запись: {stats['newest_date'].strftime('%d.%m.%Y %H:%M:%S')}")
+            
+            stats_text.value = "\n".join(stats_info)
+            page.update()
+        
+        days_field = ft.TextField(
+            label="Количество дней для хранения",
+            value="90",
+            width=200,
+            keyboard_type=ft.KeyboardType.NUMBER
+        )
+        
+        def cleanup_logs(e):
+            try:
+                days = int(days_field.value)
+                if days < 1:
+                    raise ValueError("Количество дней должно быть больше 0")
+                
+                deleted_count = cleanup_old_logs(days, auth_manager)
+                
+                # Показываем результат
+                result_dialog = ft.AlertDialog(
+                    title=ft.Text("Результат очистки"),
+                    content=ft.Text(f"Удалено {deleted_count} записей старше {days} дней"),
+                    actions=[ft.TextButton("OK", on_click=lambda e: page.close(result_dialog))]
+                )
+                if result_dialog not in page.overlay:
+                    page.overlay.append(result_dialog)
+                page.update()
+                page.open(result_dialog)
+                
+                # Обновляем статистику
+                refresh_stats()
+                
+            except ValueError as ex:
+                error_dialog = ft.AlertDialog(
+                    title=ft.Text("Ошибка"),
+                    content=ft.Text(str(ex)),
+                    actions=[ft.TextButton("OK", on_click=lambda e: page.close(error_dialog))]
+                )
+                page.overlay.append(error_dialog)
+                page.open(error_dialog)
+        
+        dialog = ft.AlertDialog(
+            title=ft.Text("Управление логами"),
+            content=ft.Container(
+                content=ft.Column([
+                    ft.Text("Статистика логов:", weight="bold"),
+                    stats_text,
+                    ft.Divider(),
+                    ft.Text("Очистка старых логов:", weight="bold"),
+                    ft.Text("Логи старше указанного количества дней будут удалены", size=12, color=ft.Colors.GREY),
+                    days_field,
+                    ft.ElevatedButton(
+                        "Очистить логи",
+                        icon=ft.Icons.DELETE_SWEEP,
+                        on_click=cleanup_logs,
+                        color=ft.Colors.RED
+                    )
+                ], spacing=10),
+                width=400,
+                height=300
+            ),
+            actions=[ft.TextButton("Закрыть", on_click=lambda e: page.close(dialog))]
+        )
+        
+        page.overlay.append(dialog)
+        refresh_stats()
+        page.open(dialog)
+    
     return ft.Column([
         ft.Text("Администрирование", size=24, weight="bold"),
         ft.Divider(),
@@ -363,5 +450,12 @@ def administration_page(page: ft.Page = None):
             "Управление пользователями",
             icon=ft.Icons.PEOPLE,
             on_click=manage_users_dialog,
+        ),
+        ft.Divider(),
+        ft.Text("Управление логами", size=18, weight="bold"),
+        ft.ElevatedButton(
+            "Очистить старые логи",
+            icon=ft.Icons.CLEANING_SERVICES,
+            on_click=lambda e: manage_logs_dialog(e),
         )
     ], spacing=10, expand=True)

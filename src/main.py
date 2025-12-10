@@ -14,11 +14,13 @@ from views.statistics import statistics_page
 from views.notes import notes_page
 from views.terminated import terminated_page
 from views.discarded_cards import discarded_cards_page
+from views.logs import logs_page
 from views.administration import administration_page
 from database.models import Employee
 from datetime import datetime
 from utils.faker_data import generate_all_fake_data, create_december_shifts
 from auth.auth import AuthManager, create_login_page
+
 def main(page: ft.Page):
     # Генерируем тестовые данные при первом запуске
     #generate_all_fake_data()  # Раскомментируйте для генерации данных
@@ -67,7 +69,6 @@ def main(page: ft.Page):
         page.theme = None
     
 
-
     # Контейнер для отображения текущей страницы
     content_container = ft.Container(
         expand=True,
@@ -89,12 +90,16 @@ def main(page: ft.Page):
         elif page_name == "settings":
             content_container.content = settings_page(page)
         elif page_name == "employees":
+            page.auth_manager = auth_manager
             content_container.content = employees_page(page)
         elif page_name == "chief_employees":
+            page.auth_manager = auth_manager
             content_container.content = chief_employees_page(page)
         elif page_name == "office_employees":
+            page.auth_manager = auth_manager
             content_container.content = office_employees_page(page)
         elif page_name == "objects":
+            page.auth_manager = auth_manager
             content_container.content = objects_page(page)
         elif page_name == "calendar":
             shifts_content, shifts_dialog = calendar_page(page)
@@ -109,6 +114,8 @@ def main(page: ft.Page):
             content_container.content = terminated_page(page)
         elif page_name == "discarded_cards":
             content_container.content = discarded_cards_page(page)
+        elif page_name == "logs":
+            content_container.content = logs_page(page)
         elif page_name == "administration":
             content_container.content = administration_page(page)
 
@@ -119,10 +126,6 @@ def main(page: ft.Page):
         """Показывает основное приложение после авторизации"""
         page.controls.clear()
         
-        # Отладочная информация
-        print(f"Пользователь: {auth_manager.current_user.username}")
-        print(f"Роль: {auth_manager.current_user.role}")
-        print(f"Разрешения: {auth_manager.current_user.allowed_pages}")
         
         # Создаём drawer с обработчиком и проверкой доступа
         page.drawer = drawer(handle_navigation_change, auth_manager)

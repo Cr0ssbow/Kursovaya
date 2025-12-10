@@ -5,9 +5,7 @@ import os
 
 def discarded_cards_page(page: ft.Page = None):
     search_value = ""
-    show_nord = True
-    show_legion = True
-    show_rosbezopasnost = True
+    selected_companies = set()  # Множество выбранных компаний
     
     # Диалог действий с карточкой
     actions_dialog = ft.AlertDialog(
@@ -121,17 +119,19 @@ def discarded_cards_page(page: ft.Page = None):
             
             # Фильтр по компаниям
             companies = []
-            if show_nord:
-                companies.append("Норд")
-            if show_legion:
-                companies.append("Легион")
-            if show_rosbezopasnost:
-                companies.append("Росбезопасность")
+            all_companies = list(Company.select())
             
-            if len(companies) < 3 and len(companies) > 0:
+            for company in all_companies:
+                attr_name = f"show_{company.name.lower().replace(' ', '_')}"
+                if getattr(discarded_cards_page, attr_name, True):
+                    companies.append(company.name)
+            
+            # Применяем фильтр только если выбрана не вся компания
+            if len(companies) < len(all_companies) and len(companies) > 0:
                 company_ids = [c.id for c in Company.select().where(Company.name.in_(companies))]
                 query = query.where(PersonalCard.company.in_(company_ids))
             elif len(companies) == 0:
+                # Если ни одна компания не выбрана, ничего не показываем
                 query = query.where(False)
             
             if search_value:
@@ -195,20 +195,83 @@ def discarded_cards_page(page: ft.Page = None):
         search_value = e.control.value.strip()
         refresh_list()
     
-    def on_nord_change(e):
-        nonlocal show_nord
-        show_nord = e.control.value
-        refresh_list()
+    def create_company_filter_dropdown():
+        """Создает dropdown с чекбоксами для фильтрации компаний"""
+        
+        # Инициализируем фильтры для всех компаний
+        companies = list(Company.select())
+        for company in companies:
+            attr_name = f"show_{company.name.lower().replace(' ', '_')}"
+            if not hasattr(discarded_cards_page, attr_name):
+                setattr(discarded_cards_page, attr_name, True)
+        
+        def update_company_filter(company_name, value):
+            attr_name = f"show_{company_name.lower().replace(' ', '_')}"
+            setattr(discarded_cards_page, attr_name, value)
+            refresh_list()
+            
+            # Обновляем текст кнопки (используем простой способ как в сотрудниках)
+            selected = []
+            for company in companies:
+                attr_name = f"show_{company.name.lower().replace(' ', '_')}"
+                if getattr(discarded_cards_page, attr_name, True):
+                    selected.append(company.name)
+            
+            if len(selected) == len(companies):
+                button_text.value = "Все ЧОПЫ"
+            elif len(selected) == 0:
+                button_text.value = "Нет ЧОПОВ"
+            else:
+                button_text.value = f"Выбрано: {len(selected)}"
+            if page:
+                page.update()
+        
+        # Создаем элементы меню
+        menu_items = []
+        for company in companies:
+            attr_name = f"show_{company.name.lower().replace(' ', '_')}"
+            
+            def make_checkbox_handler(comp_name):
+                def handler(e):
+                    update_company_filter(comp_name, e.control.value)
+                return handler
+            
+            checkbox = ft.Checkbox(
+                label=company.name,
+                value=getattr(discarded_cards_page, attr_name, True),
+                on_change=make_checkbox_handler(company.name)
+            )
+            
+            menu_items.append(
+                ft.PopupMenuItem(
+                    content=checkbox,
+                    on_click=lambda e, cb=checkbox: setattr(cb, 'value', not cb.value) or cb.on_change(type('Event', (), {'control': cb})())
+                )
+            )
+        
+        # Создаем текст кнопки отдельно для простого обновления
+        button_text = ft.Text("Все ЧОПЫ", size=14)
+        
+        # Создаем кнопку с меню
+        company_button = ft.PopupMenuButton(
+            content=ft.Container(
+                content=ft.Row([
+                    button_text,
+                    ft.Icon(ft.Icons.ARROW_DROP_DOWN, size=20)
+                ], tight=True),
+                padding=ft.padding.symmetric(horizontal=12, vertical=8),
+                border=ft.border.all(1, ft.Colors.OUTLINE),
+                border_radius=8,
+                width=180, 
+                height=47,
+            ),
+            items=menu_items,
+            tooltip="Фильтр по компаниям"
+        )
+        
+        return company_button
     
-    def on_legion_change(e):
-        nonlocal show_legion
-        show_legion = e.control.value
-        refresh_list()
-    
-    def on_rosbezopasnost_change(e):
-        nonlocal show_rosbezopasnost
-        show_rosbezopasnost = e.control.value
-        refresh_list()
+    company_button = create_company_filter_dropdown()
     
     # Создаем список
     cards_list = ft.ListView(
@@ -231,9 +294,7 @@ def discarded_cards_page(page: ft.Page = None):
                 autofocus=False,
                 dense=True,
             ),
-            ft.Checkbox(label="Норд", value=show_nord, on_change=lambda e: on_nord_change(e)),
-            ft.Checkbox(label="Легион", value=show_legion, on_change=lambda e: on_legion_change(e)),
-            ft.Checkbox(label="Росбезопасность", value=show_rosbezopasnost, on_change=lambda e: on_rosbezopasnost_change(e)),
+            company_button,
         ], alignment=ft.MainAxisAlignment.START, spacing=20),
         ft.Container(
             content=cards_list,

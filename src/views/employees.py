@@ -56,6 +56,9 @@ class EmployeesPage(BaseEmployeePage):
         employee_ids = [ec.guard_employee_id for ec in EmployeeCompany.select().where(EmployeeCompany.company_id.in_(company_ids))]
         return query.where(GuardEmployee.id.in_(employee_ids))
     
+    def _apply_user_filter(self, query, user_id):
+        return query.where(GuardEmployee.created_by_user_id == user_id)
+    
     def _get_employee_companies(self, employee):
         """Возвращает список компаний сотрудника"""
         from database.models import EmployeeCompany
@@ -177,6 +180,11 @@ class EmployeesPage(BaseEmployeePage):
         medical_exam_date = datetime.strptime(medical_exam_value, "%d.%m.%Y").date() if medical_exam_value else None
         periodic_check_date = datetime.strptime(periodic_check_value, "%d.%m.%Y").date() if periodic_check_value else None
         
+        # Получаем ID текущего пользователя
+        created_by_user_id = None
+        if hasattr(self.page, 'auth_manager') and self.page.auth_manager.current_user:
+            created_by_user_id = self.page.auth_manager.current_user.id
+        
         employee = GuardEmployee.create(
             full_name=full_name,
             birth_date=birth_date,
@@ -185,7 +193,8 @@ class EmployeesPage(BaseEmployeePage):
             guard_rank=guard_rank,
             medical_exam_date=medical_exam_date,
             periodic_check_date=periodic_check_date,
-            payment_method=payment_method_value or "на карту"
+            payment_method=payment_method_value or "на карту",
+            created_by_user_id=created_by_user_id
         )
         
         # Сохраняем связи с компаниями
@@ -195,6 +204,9 @@ class EmployeesPage(BaseEmployeePage):
                 company = Company.get(Company.name == checkbox.label)
                 EmployeeCompany.create(guard_employee=employee, company=company)
         
+        # Логирование
+        if hasattr(self.page, 'auth_manager'):
+            self.page.auth_manager.log_action("Создание сотрудника охраны", f"Создан сотрудник охраны: {full_name}")
 
         return True
     
@@ -235,6 +247,11 @@ class EmployeesPage(BaseEmployeePage):
             if checkbox.value:
                 company = Company.get(Company.name == checkbox.label)
                 EmployeeCompany.create(guard_employee=self.current_employee, company=company)
+        
+        # Логирование
+        if hasattr(self.page, 'auth_manager'):
+            self.page.auth_manager.log_action("Редактирование сотрудника охраны", f"Отредактирован сотрудник охраны: {self.current_employee.full_name}")
+        
         return True
     
     def _get_success_message(self):

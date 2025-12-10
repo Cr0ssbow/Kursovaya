@@ -276,6 +276,13 @@ class BaseEmployeePage(BasePage):
             self.current_employee.termination_date = termination_date
             self.current_employee.termination_reason = termination_reason_value or None
             self.current_employee.save()
+            
+            # Логирование
+            if hasattr(self.page, 'auth_manager'):
+                print(f"Логирую увольнение: {self.current_employee.full_name}")
+                self.page.auth_manager.log_action("Увольнение сотрудника", f"Уволен сотрудник: {self.current_employee.full_name}")
+                print("Лог создан")
+            
             return True
         
         try:
@@ -742,6 +749,12 @@ class BaseEmployeePage(BasePage):
         if self.search_value:
             query = self._apply_name_filter(query)
         
+        # Фильтрация по пользователю (обычные пользователи видят только свои записи)
+        if hasattr(self.page, 'auth_manager') and self.page.auth_manager.current_user:
+            current_user = self.page.auth_manager.current_user
+            if current_user.role != "Admin":
+                query = self._apply_user_filter(query, current_user.id)
+        
         # Применяем фильтр по компаниям
         from database.models import Company
         companies = []
@@ -804,6 +817,11 @@ class BaseEmployeePage(BasePage):
     @abstractmethod
     def _save_operation(self):
         """Операция сохранения"""
+        pass
+    
+    @abstractmethod
+    def _apply_user_filter(self, query, user_id):
+        """Применяет фильтр по пользователю"""
         pass
     
     @abstractmethod

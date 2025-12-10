@@ -1,7 +1,7 @@
 import flet as ft
 from database.models import Settings, db
 from peewee import DoesNotExist
-from excel_export import export_assignments_to_excel
+
 
 def save_theme_to_db(theme: str):
     try:
@@ -231,76 +231,7 @@ def settings_page(page: ft.Page) -> ft.Column:
         on_change=birthday_display_changed
     )
 
-    def import_to_excel(e):
-        from datetime import datetime, date
-        
-        # Создаем список месяцев
-        months = [
-            "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
-            "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
-        ]
-        
-        current_date = date.today()
-        current_month = current_date.month
-        current_year = current_date.year
-        
-        month_dropdown = ft.Dropdown(
-            label="Выберите месяц",
-            width=200,
-            value=str(current_month),
-            options=[ft.dropdown.Option(str(i), months[i-1]) for i in range(1, 13)]
-        )
-        
-        year_field = ft.TextField(
-            label="Год",
-            width=100,
-            value=str(current_year)
-        )
-        
-        def export_excel(e):
-            try:
-                month = int(month_dropdown.value)
-                year = int(year_field.value)
-                
-                success, message = export_assignments_to_excel(month, year)
-                
-                export_dialog.open = False
-                page.update()
-                
-                snack = ft.SnackBar(
-                    content=ft.Text(message),
-                    bgcolor=ft.Colors.GREEN if success else ft.Colors.RED,
-                    duration=3000 if success else 5000
-                )
-                page.overlay.append(snack)
-                snack.open = True
-                page.update()
-                
-            except ValueError:
-                snack = ft.SnackBar(
-                    content=ft.Text("Неверный формат года!"),
-                    bgcolor=ft.Colors.RED
-                )
-                page.overlay.append(snack)
-                snack.open = True
-                page.update()
-        
-        export_dialog = ft.AlertDialog(
-            title=ft.Text("Экспорт в Excel"),
-            content=ft.Column([
-                ft.Text("Выберите месяц и год для экспорта:"),
-                ft.Row([month_dropdown, year_field], spacing=10)
-            ], height=120, width=300),
-            actions=[
-                ft.TextButton("Экспорт", on_click=export_excel),
-                ft.TextButton("Отмена", on_click=lambda e: setattr(export_dialog, 'open', False) or page.update())
-            ],
-            modal=True
-        )
-        
-        page.overlay.append(export_dialog)
-        export_dialog.open = True
-        page.update()
+
 
     return ft.Column(
         [
@@ -308,13 +239,7 @@ def settings_page(page: ft.Page) -> ft.Column:
             theme_dropdown,
             cell_shape_dropdown,
             birthday_checkbox,
-            ft.Divider(),
-            ft.Text("Импорт данных"),
-            ft.ElevatedButton(
-                "Импорт в Excel",
-                icon=ft.Icons.FILE_DOWNLOAD,
-                on_click=import_to_excel,
-            ),
+
 
         ],
         spacing=10,

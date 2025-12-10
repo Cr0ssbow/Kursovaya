@@ -56,6 +56,7 @@ class GuardEmployee(BaseModel):
     hours_worked = IntegerField(verbose_name="Количество часов", default=0)
     salary = DecimalField(max_digits=10, decimal_places=2, verbose_name="Зарплата", default=0)
     payment_method = CharField(max_length=20, default="на карту", verbose_name="Способ выдачи зарплаты")
+    created_by_user_id = IntegerField(null=True, verbose_name="Создан пользователем")
     
     class Meta:
         table_name = 'guard_employees'
@@ -96,6 +97,7 @@ class ChiefEmployee(BaseModel):
     termination_reason = TextField(null=True, verbose_name="Причина увольнения")
     salary = DecimalField(max_digits=10, decimal_places=2, verbose_name="Зарплата", default=0)
     payment_method = CharField(max_length=20, default="на карту", verbose_name="Способ выдачи зарплаты")
+    created_by_user_id = IntegerField(null=True, verbose_name="Создан пользователем")
     
     class Meta:
         table_name = 'chief_employees'
@@ -117,6 +119,7 @@ class OfficeEmployee(BaseModel):
     termination_reason = TextField(null=True, verbose_name="Причина увольнения")
     salary = DecimalField(max_digits=10, decimal_places=2, verbose_name="Зарплата", default=0)
     payment_method = CharField(max_length=20, default="на карту", verbose_name="Способ выдачи зарплаты")
+    created_by_user_id = IntegerField(null=True, verbose_name="Создан пользователем")
     
     class Meta:
         table_name = 'office_employees'
@@ -144,12 +147,23 @@ class User(BaseModel):
     guard_employee = ForeignKeyField(GuardEmployee, null=True, backref='user_account')
     chief_employee = ForeignKeyField(ChiefEmployee, null=True, backref='user_account')
     office_employee = ForeignKeyField(OfficeEmployee, null=True, backref='user_account')
-    allowed_pages = TextField(default="home", verbose_name="Доступные страницы")
+    allowed_pages = TextField(default="home,settings", verbose_name="Доступные страницы")
     is_active = BooleanField(default=True, verbose_name="Активен")
     created_at = DateTimeField(default=datetime.now)
     
     class Meta:
         table_name = 'users'
+
+class UserLog(BaseModel):
+    """Модель логирования действий пользователей"""
+    user = ForeignKeyField(User, backref='logs', on_delete='CASCADE')
+    action = CharField(max_length=100, verbose_name="Действие")
+    description = TextField(null=True, verbose_name="Описание")
+    ip_address = CharField(max_length=45, null=True, verbose_name="IP адрес")
+    created_at = DateTimeField(default=datetime.now)
+    
+    class Meta:
+        table_name = 'user_logs'
 
 class Object(BaseModel):
     """Модель объекта"""
@@ -303,7 +317,7 @@ def init_database():
     """Инициализация базы данных"""
     try:
         db.connect()
-        db.create_tables([Company, GuardEmployee, ChiefEmployee, OfficeEmployee, EmployeeCompany, Settings, User, Object, ObjectAddress, ObjectRate, Assignment, ChiefObjectAssignment, PersonalCard, PersonalCardPhoto, EmployeeDocument, EmployeeDocumentPhoto, CashWithdrawal], safe=True)
+        db.create_tables([Company, GuardEmployee, ChiefEmployee, OfficeEmployee, EmployeeCompany, Settings, Role, User, UserLog, Object, ObjectAddress, ObjectRate, Assignment, ChiefObjectAssignment, PersonalCard, PersonalCardPhoto, EmployeeDocument, EmployeeDocumentPhoto, CashWithdrawal], safe=True)
         
         # Создаем компании по умолчанию
         for company_name in ["Легион", "Норд", "Росбезопасность"]:
@@ -325,6 +339,22 @@ def init_database():
         # Миграция: добавляем поле комментария к сменам
         try:
             db.execute_sql("ALTER TABLE assignments ADD COLUMN comment TEXT")
+        except:
+            pass
+            
+        # Миграция: добавляем поле created_by_user_id к моделям сотрудников
+        try:
+            db.execute_sql("ALTER TABLE guard_employees ADD COLUMN created_by_user_id INTEGER")
+        except:
+            pass
+            
+        try:
+            db.execute_sql("ALTER TABLE chief_employees ADD COLUMN created_by_user_id INTEGER")
+        except:
+            pass
+            
+        try:
+            db.execute_sql("ALTER TABLE office_employees ADD COLUMN created_by_user_id INTEGER")
         except:
             pass
             
