@@ -209,6 +209,7 @@ class Assignment(BaseModel):
     bonus_amount = DecimalField(max_digits=7, decimal_places=2, default=0, verbose_name="Сумма премии")
     bonus_comment = TextField(null=True, verbose_name="Комментарий к премии")
     comment = TextField(null=True, verbose_name="Комментарий")
+    created_by_user_id = IntegerField(null=True, verbose_name="Создан пользователем")
     created_at = DateTimeField(default=datetime.now)
 
     class Meta:
@@ -303,6 +304,7 @@ class CashWithdrawal(BaseModel):
     bonus_amount = DecimalField(max_digits=7, decimal_places=2, default=0, verbose_name="Сумма премии")
     bonus_comment = TextField(null=True, verbose_name="Комментарий к премии")
     comment = TextField(null=True, verbose_name="Комментарий")
+    created_by_user_id = IntegerField(null=True, verbose_name="Создан пользователем")
     created_at = DateTimeField(default=datetime.now)
     
     class Meta:
@@ -381,6 +383,17 @@ def init_database():
             
         try:
             db.execute_sql("ALTER TABLE cash_withdrawals ADD COLUMN bonus_comment TEXT")
+        except:
+            pass
+            
+        # Миграция: добавляем created_by_user_id к назначениям и ВЗН
+        try:
+            db.execute_sql("ALTER TABLE assignments ADD COLUMN created_by_user_id INTEGER")
+        except:
+            pass
+            
+        try:
+            db.execute_sql("ALTER TABLE cash_withdrawals ADD COLUMN created_by_user_id INTEGER")
         except:
             pass
             

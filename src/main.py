@@ -23,8 +23,8 @@ from auth.auth import AuthManager, create_login_page
 
 def main(page: ft.Page):
     # Генерируем тестовые данные при первом запуске
-    #generate_all_fake_data()  # Раскомментируйте для генерации данных
-    #create_december_shifts()  # Создаем 100 смен на каждый день декабря
+    generate_all_fake_data()  # Раскомментируйте для генерации данных
+    create_december_shifts()  # Создаем 100 смен на каждый день декабря
     
     page.title = "ЧОП Легион - Система учёта сотрудников"
     if getattr(sys, 'frozen', False):

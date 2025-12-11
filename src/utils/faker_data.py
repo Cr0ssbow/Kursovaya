@@ -57,8 +57,12 @@ def create_fake_objects(count=5):
 
 def create_fake_assignments(employees, objects, days=30):
     """Создает тестовые назначения на смены"""
+    from database.models import User
     assignments = []
     start_date = date.today() - timedelta(days=days)
+    
+    # Получаем список пользователей
+    users = list(User.select())
     
     for day in range(days):
         current_date = start_date + timedelta(days=day)
@@ -68,6 +72,7 @@ def create_fake_assignments(employees, objects, days=30):
                 obj = random.choice(objects)
                 hours = random.choice([8, 12, 24])
                 hourly_rate = random.randint(150, 250)
+                user = random.choice(users) if users else None
                 
                 assignment = Assignment.create(
                     employee=employee,
@@ -79,7 +84,8 @@ def create_fake_assignments(employees, objects, days=30):
                     bonus_amount=random.randint(0, 1000) if random.random() < 0.2 else 0,
                     deduction_amount=random.randint(0, 500) if random.random() < 0.1 else 0,
                     bonus_comment=fake.sentence() if random.random() < 0.2 else "",
-                    absent_comment=fake.sentence() if random.random() < 0.1 else ""
+                    absent_comment=fake.sentence() if random.random() < 0.1 else "",
+                    created_by_user_id=user.id if user else None
                 )
                 assignments.append(assignment)
     
@@ -87,8 +93,12 @@ def create_fake_assignments(employees, objects, days=30):
 
 def create_fake_cash_withdrawals(employees, objects, days=30):
     """Создает тестовые записи ВЗН"""
+    from database.models import User
     withdrawals = []
     start_date = date.today() - timedelta(days=days)
+    
+    # Получаем список пользователей
+    users = list(User.select())
     
     for day in range(days):
         current_date = start_date + timedelta(days=day)
@@ -98,6 +108,7 @@ def create_fake_cash_withdrawals(employees, objects, days=30):
                 obj = random.choice(objects)
                 hours = random.choice([4, 6, 8])
                 hourly_rate = random.randint(200, 300)
+                user = random.choice(users) if users else None
                 
                 withdrawal = CashWithdrawal.create(
                     employee=employee,
@@ -108,7 +119,8 @@ def create_fake_cash_withdrawals(employees, objects, days=30):
                     is_absent=random.random() < 0.05,  # 5% пропусков ВЗН
                     bonus_amount=random.randint(0, 500) if random.random() < 0.15 else 0,
                     deduction_amount=random.randint(0, 300) if random.random() < 0.08 else 0,
-                    bonus_comment=fake.sentence() if random.random() < 0.15 else ""
+                    bonus_comment=fake.sentence() if random.random() < 0.15 else "",
+                    created_by_user_id=user.id if user else None
                 )
                 withdrawals.append(withdrawal)
     
@@ -136,11 +148,16 @@ def create_december_shifts():
             current_date = date(2025, 12, day)
             print(f"Создание смен на {day} декабря...")
             
+            # Получаем список пользователей
+            from database.models import User
+            users = list(User.select())
+            
             for _ in range(100):  # 100 смен на день
                 employee = random.choice(employees)
                 obj = random.choice(objects)
                 hours = random.choice([8, 12, 24])
                 hourly_rate = random.randint(150, 250)
+                user = random.choice(users) if users else None
                 
                 Assignment.create(
                     employee=employee,
@@ -152,7 +169,29 @@ def create_december_shifts():
                     bonus_amount=random.randint(0, 1000) if random.random() < 0.2 else 0,
                     deduction_amount=random.randint(0, 500) if random.random() < 0.1 else 0,
                     bonus_comment=fake.sentence() if random.random() < 0.2 else "",
-                    absent_comment=fake.sentence() if random.random() < 0.1 else ""
+                    absent_comment=fake.sentence() if random.random() < 0.1 else "",
+                    created_by_user_id=user.id if user else None
+                )
+            
+            # Создаем ВЗН для этого дня
+            for _ in range(30):  # 30 ВЗН на день
+                employee = random.choice(employees)
+                obj = random.choice(objects)
+                hours = random.choice([4, 6, 8])
+                hourly_rate = random.randint(200, 300)
+                user = random.choice(users) if users else None
+                
+                CashWithdrawal.create(
+                    employee=employee,
+                    object=obj,
+                    date=current_date,
+                    hours=hours,
+                    hourly_rate=hourly_rate,
+                    is_absent=random.random() < 0.05,
+                    bonus_amount=random.randint(0, 500) if random.random() < 0.15 else 0,
+                    deduction_amount=random.randint(0, 300) if random.random() < 0.08 else 0,
+                    bonus_comment=fake.sentence() if random.random() < 0.15 else "",
+                    created_by_user_id=user.id if user else None
                 )
         
         print("Смены на весь декабрь созданы!")
