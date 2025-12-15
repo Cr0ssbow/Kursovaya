@@ -56,6 +56,8 @@ class GuardEmployee(BaseModel):
     hours_worked = IntegerField(verbose_name="Количество часов", default=0)
     salary = DecimalField(max_digits=10, decimal_places=2, verbose_name="Зарплата", default=0)
     payment_method = CharField(max_length=20, default="на карту", verbose_name="Способ выдачи зарплаты")
+    staff_status = CharField(max_length=20, default="в штате", verbose_name="Статус штата")
+    criminal_liability = CharField(max_length=20, default="нет", verbose_name="Уголовная/административная ответственность")
     created_by_user_id = IntegerField(null=True, verbose_name="Создан пользователем")
     
     class Meta:
@@ -97,6 +99,8 @@ class ChiefEmployee(BaseModel):
     termination_reason = TextField(null=True, verbose_name="Причина увольнения")
     salary = DecimalField(max_digits=10, decimal_places=2, verbose_name="Зарплата", default=0)
     payment_method = CharField(max_length=20, default="на карту", verbose_name="Способ выдачи зарплаты")
+    staff_status = CharField(max_length=20, default="в штате", verbose_name="Статус штата")
+    criminal_liability = CharField(max_length=20, default="нет", verbose_name="Уголовная/административная ответственность")
     created_by_user_id = IntegerField(null=True, verbose_name="Создан пользователем")
     
     class Meta:
@@ -119,6 +123,8 @@ class OfficeEmployee(BaseModel):
     termination_reason = TextField(null=True, verbose_name="Причина увольнения")
     salary = DecimalField(max_digits=10, decimal_places=2, verbose_name="Зарплата", default=0)
     payment_method = CharField(max_length=20, default="на карту", verbose_name="Способ выдачи зарплаты")
+    staff_status = CharField(max_length=20, default="в штате", verbose_name="Статус штата")
+    criminal_liability = CharField(max_length=20, default="нет", verbose_name="Уголовная/административная ответственность")
     created_by_user_id = IntegerField(null=True, verbose_name="Создан пользователем")
     
     class Meta:
@@ -394,6 +400,38 @@ def init_database():
             
         try:
             db.execute_sql("ALTER TABLE cash_withdrawals ADD COLUMN created_by_user_id INTEGER")
+        except:
+            pass
+            
+        # Миграция: добавляем поле staff_status
+        try:
+            db.execute_sql("ALTER TABLE guard_employees ADD COLUMN staff_status VARCHAR(20) DEFAULT 'в штате'")
+        except:
+            pass
+            
+        try:
+            db.execute_sql("ALTER TABLE chief_employees ADD COLUMN staff_status VARCHAR(20) DEFAULT 'в штате'")
+        except:
+            pass
+            
+        try:
+            db.execute_sql("ALTER TABLE office_employees ADD COLUMN staff_status VARCHAR(20) DEFAULT 'в штате'")
+        except:
+            pass
+            
+        # Миграция: добавляем поле criminal_liability
+        try:
+            db.execute_sql("ALTER TABLE guard_employees ADD COLUMN criminal_liability VARCHAR(20) DEFAULT 'нет'")
+        except:
+            pass
+            
+        try:
+            db.execute_sql("ALTER TABLE chief_employees ADD COLUMN criminal_liability VARCHAR(20) DEFAULT 'нет'")
+        except:
+            pass
+            
+        try:
+            db.execute_sql("ALTER TABLE office_employees ADD COLUMN criminal_liability VARCHAR(20) DEFAULT 'нет'")
         except:
             pass
             

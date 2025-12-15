@@ -16,6 +16,10 @@ from views.terminated import terminated_page
 from views.discarded_cards import discarded_cards_page
 from views.logs import logs_page
 from views.administration import administration_page
+from views.staff_list import staff_list_page
+from views.duty_calendar import duty_calendar_page
+from views.accounting_calendar import accounting_calendar_page
+
 from database.models import Employee
 from datetime import datetime
 from utils.faker_data import generate_all_fake_data, create_december_shifts
@@ -23,8 +27,8 @@ from auth.auth import AuthManager, create_login_page
 
 def main(page: ft.Page):
     # Генерируем тестовые данные при первом запуске
-    generate_all_fake_data()  # Раскомментируйте для генерации данных
-    create_december_shifts()  # Создаем 100 смен на каждый день декабря
+    #generate_all_fake_data()  # Раскомментируйте для генерации данных
+    #create_december_shifts()  # Создаем 100 смен на каждый день декабря
     
     page.title = "ЧОП Легион - Система учёта сотрудников"
     if getattr(sys, 'frozen', False):
@@ -39,6 +43,15 @@ def main(page: ft.Page):
     
     # Инициализируем менеджер авторизации
     auth_manager = AuthManager()
+    
+    # Создаем фиктивного администратора для полного доступа
+    class MockUser:
+        def __init__(self):
+            self.username = "Админ"
+            self.role = "Admin"
+            self.allowed_pages = "home,settings,employees,chief_employees,office_employees,objects,calendar,statistics,notes,terminated,discarded_cards,logs,administration,staff_list"
+    
+    auth_manager.current_user = MockUser()
     
     # Загружаем тему из БД при старте
     theme = load_theme_from_db()
@@ -118,6 +131,12 @@ def main(page: ft.Page):
             content_container.content = logs_page(page)
         elif page_name == "administration":
             content_container.content = administration_page(page)
+        elif page_name == "staff_list":
+            content_container.content = staff_list_page(page)
+        elif page_name == "duty_calendar":
+            content_container.content = duty_calendar_page(page)
+        elif page_name == "accounting_calendar":
+            content_container.content = accounting_calendar_page(page)
 
         page.close(page.drawer)
         page.update()
@@ -149,7 +168,7 @@ def main(page: ft.Page):
                 ft.Row(
                     [
                         ft.TextButton(
-                            f"Пользователь: {auth_manager.current_user.username}",
+                            f"Пользователь: {auth_manager.current_user.username if auth_manager.current_user else 'Админ'}",
                             on_click=lambda e: None
                         ),
                         ft.IconButton(
@@ -185,7 +204,8 @@ def main(page: ft.Page):
         )
         page.update()
     
-    # Показываем экран авторизации при запуске
-    show_login()
+    # Временно отключаем авторизацию - сразу показываем основное приложение
+    show_main_app()
+    #show_login()
 
 ft.app(target=main)

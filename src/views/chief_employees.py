@@ -9,13 +9,14 @@ class ChiefEmployeesPage(BaseEmployeePage):
     
     def _create_form_fields(self):
         """Создает поля формы"""
+        super()._create_form_fields()
         self.name_field = ft.TextField(label="ФИО", width=300)
         self.birth_field = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=180, on_change=self.format_date_input, max_length=10)
         self.position_field = ft.TextField(label="Должность", width=250)
         self.guard_rank_field = ft.Dropdown(label="Разряд охранника", width=180, options=[ft.dropdown.Option("ОВН"), ft.dropdown.Option("Б")] + [ft.dropdown.Option(str(i)) for i in range(4, 7)])
         self.salary_field = ft.TextField(label="Зарплата", width=150)
         self.payment_method_field = ft.Dropdown(label="Способ выдачи зарплаты", width=250, options=[ft.dropdown.Option("на карту"), ft.dropdown.Option("на руки")], value="на карту")
-        self.company_checkboxes = self._create_company_checkboxes()
+        self.company_popup = self.create_company_popup_button(250)
     
     def _get_base_query(self):
         return ChiefEmployee.select().where(ChiefEmployee.termination_date.is_null())
@@ -135,6 +136,8 @@ class ChiefEmployeesPage(BaseEmployeePage):
                     ft.Text(f"Разряд охранника: {str(getattr(employee, 'guard_rank', '')) if getattr(employee, 'guard_rank', None) else 'Не указано'}", size=16),
                     ft.Text(f"Зарплата: {employee.salary} ₽", size=16),
                     ft.Text(f"Способ выдачи зарплаты: {employee.payment_method}", size=16),
+                    ft.Text(f"Статус штата: {getattr(employee, 'staff_status', 'в штате')}", size=16),
+                    ft.Text(f"Уголовная/административная ответственность: {getattr(employee, 'criminal_liability', 'нет')}", size=16),
                     ft.Text(f"Компании: {self._get_employee_companies(employee)}", size=16),
                     ft.Text(f"Закрепленные объекты: {objects_text}", size=16),
                 ]),
@@ -147,8 +150,7 @@ class ChiefEmployeesPage(BaseEmployeePage):
         return "Добавить начальника охраны"
     
     def _get_form_fields(self):
-        company_row = ft.Row([ft.Text("Компании:", width=100)] + self.company_checkboxes)
-        return [self.name_field, self.birth_field, self.position_field, self.guard_rank_field, self.salary_field, self.payment_method_field, company_row]
+        return [self.name_field, self.birth_field, self.position_field, self.guard_rank_field, self.salary_field, self.payment_method_field, self.staff_status_dropdown, self.criminal_liability_dropdown, self.company_popup]
     
     def _save_operation(self):
         full_name = self.name_field.value.strip()
@@ -179,6 +181,8 @@ class ChiefEmployeesPage(BaseEmployeePage):
             guard_rank=self.guard_rank_field.value if self.guard_rank_field.value else None,
             salary=salary,
             payment_method=payment_method_value or "на карту",
+            staff_status=self.staff_status_dropdown.value or "в штате",
+            criminal_liability=self.criminal_liability_dropdown.value or "нет",
             created_by_user_id=created_by_user_id
         )
         
@@ -206,16 +210,17 @@ class ChiefEmployeesPage(BaseEmployeePage):
     
     def _create_edit_fields(self):
         """Создает поля редактирования"""
+        super()._create_edit_fields()
         self.edit_name_field = ft.TextField(label="ФИО", width=500)
         self.edit_birth_field = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=500, on_change=self.format_date_input, max_length=10)
         self.edit_position_field = ft.TextField(label="Должность", width=500)
         self.edit_guard_rank_field = ft.Dropdown(label="Разряд охранника", width=500, options=[ft.dropdown.Option("ОВН"), ft.dropdown.Option("Б")] + [ft.dropdown.Option(str(i)) for i in range(4, 7)])
         self.edit_salary_field = ft.TextField(label="Зарплата", width=500)
         self.edit_payment_method_field = ft.Dropdown(label="Способ выдачи зарплаты", width=500, options=[ft.dropdown.Option("на карту"), ft.dropdown.Option("на руки")])
-        self.edit_company_checkboxes = self._create_company_checkboxes(False)
+        self.edit_company_popup = self.create_edit_company_popup_button()
     
     def _get_edit_fields(self):
-        return [self.edit_name_field, self.edit_birth_field, self.edit_position_field, self.edit_guard_rank_field, self.edit_salary_field, self.edit_payment_method_field, self.create_edit_company_dropdown()]
+        return [self.edit_name_field, self.edit_birth_field, self.edit_position_field, self.edit_guard_rank_field, self.edit_salary_field, self.edit_payment_method_field, self.edit_staff_status_dropdown, self.edit_criminal_liability_dropdown, self.edit_company_popup]
     
     def _populate_edit_fields(self, employee):
         self.edit_name_field.value = employee.full_name
@@ -224,11 +229,21 @@ class ChiefEmployeesPage(BaseEmployeePage):
         self.edit_guard_rank_field.value = str(employee.guard_rank) if hasattr(employee, 'guard_rank') and employee.guard_rank else None
         self.edit_salary_field.value = str(employee.salary)
         self.edit_payment_method_field.value = employee.payment_method
+        self.edit_staff_status_dropdown.value = getattr(employee, 'staff_status', 'в штате')
+        self.edit_criminal_liability_dropdown.value = getattr(employee, 'criminal_liability', 'нет')
         # Заполняем чекбоксы компаний
         from database.models import EmployeeCompany, Company
         employee_companies = [ec.company.name for ec in EmployeeCompany.select().join(Company).where(EmployeeCompany.chief_employee == employee)]
         for checkbox in self.edit_company_checkboxes:
             checkbox.value = checkbox.label in employee_companies
+        # Обновляем текст кнопки
+        selected = [cb.label for cb in self.edit_company_checkboxes if cb.value]
+        if len(selected) == len(self.edit_company_checkboxes):
+            self.edit_company_popup_button.content.content.controls[0].value = "Все компании"
+        elif len(selected) == 0:
+            self.edit_company_popup_button.content.content.controls[0].value = "Нет компаний"
+        else:
+            self.edit_company_popup_button.content.content.controls[0].value = f"Выбрано: {len(selected)}"
     
     def _save_edit_operation(self):
         full_name = self.edit_name_field.value.strip()
@@ -253,6 +268,8 @@ class ChiefEmployeesPage(BaseEmployeePage):
         self.current_employee.guard_rank = self.edit_guard_rank_field.value if self.edit_guard_rank_field.value else None
         self.current_employee.salary = salary
         self.current_employee.payment_method = payment_method_value or "на карту"
+        self.current_employee.staff_status = self.edit_staff_status_dropdown.value or "в штате"
+        self.current_employee.criminal_liability = self.edit_criminal_liability_dropdown.value or "нет"
         
         self.current_employee.save()
         

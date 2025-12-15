@@ -1144,7 +1144,7 @@ class CalendarPage(BasePage):
             self.page.overlay.append(self.edit_vzn_dialog)
         
         return ft.Column([
-            ft.Text("Календарь смен", size=24, weight="bold"),
+            ft.Text("Календарь начальника охраны", size=24, weight="bold"),
             ft.Divider(),
             ft.Row([
                 ft.IconButton(ft.Icons.ARROW_LEFT, on_click=lambda e: self.change_month(-1)),

@@ -598,79 +598,64 @@ class BaseEmployeePage(BasePage):
         
         return self.company_button
     
-    def create_edit_company_dropdown(self):
-        """Создает dropdown с чекбоксами для редактирования компаний"""
+    def create_edit_company_popup_button(self, width=500):
+        """Создает popup button для редактирования компаний"""
         from database.models import Company
         
         companies = list(Company.select())
+        self.edit_company_checkboxes = []
         
-        def update_company_selection(company_name, value):
-            for checkbox in self.edit_company_checkboxes:
-                if checkbox.label == company_name:
-                    checkbox.value = value
-                    break
-            
+        for company in companies:
+            self.edit_company_checkboxes.append(ft.Checkbox(
+                label=company.name,
+                value=False
+            ))
+        
+        def update_button_text():
             selected = [cb.label for cb in self.edit_company_checkboxes if cb.value]
-            
             if len(selected) == len(companies):
-                self.edit_company_button.content.content.controls[0].value = "Все компании"
+                self.edit_company_popup_button.content.content.controls[0].value = "Все компании"
             elif len(selected) == 0:
-                self.edit_company_button.content.content.controls[0].value = "Нет компаний"
+                self.edit_company_popup_button.content.content.controls[0].value = "Нет компаний"
             else:
-                self.edit_company_button.content.content.controls[0].value = f"Выбрано: {len(selected)}"
+                self.edit_company_popup_button.content.content.controls[0].value = f"Выбрано: {len(selected)}"
             self.page.update()
         
+        def make_checkbox_handler(checkbox):
+            def handler(e):
+                checkbox.value = e.control.value
+                update_button_text()
+            return handler
+        
         menu_items = []
-        for company in companies:
-            def make_checkbox_handler(comp_name):
-                def handler(e):
-                    update_company_selection(comp_name, e.control.value)
-                return handler
-            
-            checkbox_value = False
-            for checkbox in self.edit_company_checkboxes:
-                if checkbox.label == company.name:
-                    checkbox_value = checkbox.value
-                    break
-            
-            checkbox = ft.Checkbox(
-                label=company.name,
-                value=checkbox_value,
-                on_change=make_checkbox_handler(company.name)
-            )
-            
+        for checkbox in self.edit_company_checkboxes:
             menu_items.append(
                 ft.PopupMenuItem(
-                    content=checkbox,
-                    on_click=lambda e, cb=checkbox: setattr(cb, 'value', not cb.value) or cb.on_change(type('Event', (), {'control': cb})())
+                    content=ft.Checkbox(
+                        label=checkbox.label,
+                        value=checkbox.value,
+                        on_change=make_checkbox_handler(checkbox)
+                    )
                 )
             )
         
-        selected = [cb.label for cb in self.edit_company_checkboxes if cb.value]
-        if len(selected) == len(companies):
-            initial_text = "Все компании"
-        elif len(selected) == 0:
-            initial_text = "Нет компаний"
-        else:
-            initial_text = f"Выбрано: {len(selected)}"
-        
-        self.edit_company_button = ft.PopupMenuButton(
+        self.edit_company_popup_button = ft.PopupMenuButton(
             content=ft.Container(
                 content=ft.Row([
-                    ft.Text(initial_text, size=14),
+                    ft.Text("Нет компаний", size=14),
                     ft.Icon(ft.Icons.ARROW_DROP_DOWN, size=20)
                 ], tight=True),
                 padding=ft.padding.symmetric(horizontal=12, vertical=8),
-                border=ft.border.all(1, ft.Colors.BLACK87),
+                border=ft.border.all(1, ft.Colors.BLACK),
                 border_radius=8,
-                width=500, 
+                width=width,
                 height=47,
             ),
             items=menu_items,
             tooltip="Выбор компаний"
         )
         
-        return self.edit_company_button
+        return self.edit_company_popup_button
     
     def _create_company_checkboxes(self, first_checked=True):
         """Создает чекбоксы для компаний"""
@@ -682,6 +667,65 @@ class BaseEmployeePage(BasePage):
                 value=first_checked and i == 0
             ))
         return checkboxes
+    
+    def create_company_popup_button(self, width=500):
+        """Создает popup button для выбора компаний"""
+        from database.models import Company
+        
+        companies = list(Company.select())
+        self.company_checkboxes = []
+        
+        for i, company in enumerate(companies):
+            self.company_checkboxes.append(ft.Checkbox(
+                label=company.name,
+                value=i == 0
+            ))
+        
+        def update_button_text():
+            selected = [cb.label for cb in self.company_checkboxes if cb.value]
+            if len(selected) == len(companies):
+                self.company_popup_button.content.content.controls[0].value = "Все компании"
+            elif len(selected) == 0:
+                self.company_popup_button.content.content.controls[0].value = "Нет компаний"
+            else:
+                self.company_popup_button.content.content.controls[0].value = f"Выбрано: {len(selected)}"
+            self.page.update()
+        
+        def make_checkbox_handler(checkbox):
+            def handler(e):
+                checkbox.value = e.control.value
+                update_button_text()
+            return handler
+        
+        menu_items = []
+        for checkbox in self.company_checkboxes:
+            menu_items.append(
+                ft.PopupMenuItem(
+                    content=ft.Checkbox(
+                        label=checkbox.label,
+                        value=checkbox.value,
+                        on_change=make_checkbox_handler(checkbox)
+                    )
+                )
+            )
+        
+        self.company_popup_button = ft.PopupMenuButton(
+            content=ft.Container(
+                content=ft.Row([
+                    ft.Text("Легион", size=14),
+                    ft.Icon(ft.Icons.ARROW_DROP_DOWN, size=20)
+                ], tight=True),
+                padding=ft.padding.symmetric(horizontal=12, vertical=8),
+                border=ft.border.all(1, ft.Colors.BLACK),
+                border_radius=8,
+                width=width,
+                height=47,
+            ),
+            items=menu_items,
+            tooltip="Выбор компаний"
+        )
+        
+        return self.company_popup_button
     
     def _create_list(self):
         """Создает список"""
@@ -735,7 +779,24 @@ class BaseEmployeePage(BasePage):
     @abstractmethod
     def _create_form_fields(self):
         """Создает поля формы"""
-        pass
+        self.staff_status_dropdown = ft.Dropdown(
+            label="Статус штата",
+            width=500,
+            options=[
+                ft.dropdown.Option("в штате"),
+                ft.dropdown.Option("за штатом")
+            ],
+            value="в штате"
+        )
+        self.criminal_liability_dropdown = ft.Dropdown(
+            label="Уголовная/административная ответственность",
+            width=500,
+            options=[
+                ft.dropdown.Option("нет"),
+                ft.dropdown.Option("да")
+            ],
+            value="нет"
+        )
     
 
     
@@ -842,7 +903,22 @@ class BaseEmployeePage(BasePage):
     @abstractmethod
     def _create_edit_fields(self):
         """Создает поля редактирования"""
-        pass
+        self.edit_staff_status_dropdown = ft.Dropdown(
+            label="Статус штата",
+            width=500,
+            options=[
+                ft.dropdown.Option("в штате"),
+                ft.dropdown.Option("за штатом")
+            ]
+        )
+        self.edit_criminal_liability_dropdown = ft.Dropdown(
+            label="Уголовная/административная ответственность",
+            width=500,
+            options=[
+                ft.dropdown.Option("нет"),
+                ft.dropdown.Option("да")
+            ]
+        )
     
     @abstractmethod
     def _get_edit_fields(self):

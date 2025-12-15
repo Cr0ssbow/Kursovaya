@@ -12,6 +12,7 @@ class EmployeesPage(BaseEmployeePage):
     
     def _create_form_fields(self):
         """Создает поля формы"""
+        super()._create_form_fields()
         self.name_field = ft.TextField(label="ФИО", width=500)
         self.birth_field = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=500, on_change=self.format_date_input, max_length=10)
         self.certificate_field = ft.TextField(label="Номер удостоверения (буква№ 000000)", width=500, max_length=9, on_change=self._format_certificate_input)
@@ -20,10 +21,11 @@ class EmployeesPage(BaseEmployeePage):
         self.periodic_check_field = ft.TextField(label="Дата прохождения периодической проверки (дд.мм.гггг)", width=500, on_change=self.format_date_input, max_length=10)
         self.guard_rank_field = ft.Dropdown(label="Разряд охранника", width=500, options=[ft.dropdown.Option("ОВН"), ft.dropdown.Option("Б")] + [ft.dropdown.Option(str(i)) for i in range(4, 7)])
         self.payment_method_field = ft.Dropdown(label="Способ выдачи зарплаты", width=500, options=[ft.dropdown.Option("на карту"), ft.dropdown.Option("на руки")], value="на карту")
-        self.company_checkboxes = self._create_company_checkboxes()
+        self.company_popup = self.create_company_popup_button()
     
     def _create_edit_fields(self):
         """Создает поля редактирования"""
+        super()._create_edit_fields()
         self.edit_name_field = ft.TextField(label="ФИО", width=500)
         self.edit_birth_field = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=500, on_change=self.format_date_input, max_length=10)
         self.edit_certificate_field = ft.TextField(label="Номер удостоверения (буква№ 000000)", width=500, max_length=9, on_change=self._format_certificate_input)
@@ -32,7 +34,7 @@ class EmployeesPage(BaseEmployeePage):
         self.edit_periodic_check_field = ft.TextField(label="Дата прохождения периодической проверки (дд.мм.гггг)", width=500, on_change=self.format_date_input, max_length=10)
         self.edit_guard_rank_field = ft.Dropdown(label="Разряд охранника", width=500, options=[ft.dropdown.Option("ОВН"), ft.dropdown.Option("Б")] + [ft.dropdown.Option(str(i)) for i in range(4, 7)])
         self.edit_payment_method_field = ft.Dropdown(label="Способ выдачи зарплаты", width=500, options=[ft.dropdown.Option("на карту"), ft.dropdown.Option("на руки")])
-        self.edit_company_checkboxes = self._create_company_checkboxes(False)
+        self.edit_company_popup = self.create_edit_company_popup_button()
     
     def _get_base_query(self):
         return GuardEmployee.select().where(GuardEmployee.termination_date.is_null())
@@ -113,6 +115,8 @@ class EmployeesPage(BaseEmployeePage):
                     ft.Text(f"Медкомиссия: {self.format_date(getattr(employee, 'medical_exam_date', None))}", size=16),
                     ft.Text(f"Периодическая проверка: {self.format_date(getattr(employee, 'periodic_check_date', None))}", size=16),
                     ft.Text(f"Способ выдачи зарплаты: {getattr(employee, 'payment_method', 'на карту')}", size=16),
+                    ft.Text(f"Статус штата: {getattr(employee, 'staff_status', 'в штате')}", size=16),
+                    ft.Text(f"Уголовная/административная ответственность: {getattr(employee, 'criminal_liability', 'нет')}", size=16),
                     ft.Text(f"Компании: {self._get_employee_companies(employee)}", size=16),
                 ], spacing=15),
                 ft.Container(expand=True)
@@ -137,11 +141,10 @@ class EmployeesPage(BaseEmployeePage):
         return "Добавить сотрудника"
     
     def _get_form_fields(self):
-        company_row = ft.Row([ft.Text("Компании:", width=100)] + self.company_checkboxes)
-        return [self.name_field, self.birth_field, self.certificate_field, self.guard_license_field, self.medical_exam_field, self.periodic_check_field, self.guard_rank_field, self.payment_method_field, company_row]
+        return [self.name_field, self.birth_field, self.certificate_field, self.guard_license_field, self.medical_exam_field, self.periodic_check_field, self.guard_rank_field, self.payment_method_field, self.staff_status_dropdown, self.criminal_liability_dropdown, self.company_popup]
     
     def _get_edit_fields(self):
-        return [self.edit_name_field, self.edit_birth_field, self.edit_certificate_field, self.edit_guard_license_field, self.edit_medical_exam_field, self.edit_periodic_check_field, self.edit_guard_rank_field, self.edit_payment_method_field, self.create_edit_company_dropdown()]
+        return [self.edit_name_field, self.edit_birth_field, self.edit_certificate_field, self.edit_guard_license_field, self.edit_medical_exam_field, self.edit_periodic_check_field, self.edit_guard_rank_field, self.edit_payment_method_field, self.edit_staff_status_dropdown, self.edit_criminal_liability_dropdown, self.edit_company_popup]
     
     def _populate_edit_fields(self, employee):
         self.edit_name_field.value = employee.full_name
@@ -152,12 +155,22 @@ class EmployeesPage(BaseEmployeePage):
         self.edit_medical_exam_field.value = self.format_date(getattr(employee, 'medical_exam_date', None)) if hasattr(employee, 'medical_exam_date') else ""
         self.edit_periodic_check_field.value = self.format_date(getattr(employee, 'periodic_check_date', None)) if hasattr(employee, 'periodic_check_date') else ""
         self.edit_payment_method_field.value = getattr(employee, 'payment_method', 'на карту')
+        self.edit_staff_status_dropdown.value = getattr(employee, 'staff_status', 'в штате')
+        self.edit_criminal_liability_dropdown.value = getattr(employee, 'criminal_liability', 'нет')
         
         # Заполняем чекбоксы компаний
         from database.models import EmployeeCompany
         employee_companies = [ec.company.name for ec in EmployeeCompany.select().join(Company).where(EmployeeCompany.guard_employee == employee)]
         for checkbox in self.edit_company_checkboxes:
             checkbox.value = checkbox.label in employee_companies
+        # Обновляем текст кнопки
+        selected = [cb.label for cb in self.edit_company_checkboxes if cb.value]
+        if len(selected) == len(self.edit_company_checkboxes):
+            self.edit_company_popup_button.content.content.controls[0].value = "Все компании"
+        elif len(selected) == 0:
+            self.edit_company_popup_button.content.content.controls[0].value = "Нет компаний"
+        else:
+            self.edit_company_popup_button.content.content.controls[0].value = f"Выбрано: {len(selected)}"
     
     def _save_operation(self):
         full_name = self.name_field.value.strip()
@@ -194,6 +207,8 @@ class EmployeesPage(BaseEmployeePage):
             medical_exam_date=medical_exam_date,
             periodic_check_date=periodic_check_date,
             payment_method=payment_method_value or "на карту",
+            staff_status=self.staff_status_dropdown.value or "в штате",
+            criminal_liability=self.criminal_liability_dropdown.value or "нет",
             created_by_user_id=created_by_user_id
         )
         
@@ -235,6 +250,8 @@ class EmployeesPage(BaseEmployeePage):
         self.current_employee.periodic_check_date = datetime.strptime(periodic_check_value, "%d.%m.%Y").date() if periodic_check_value and periodic_check_value != "Не указано" else None
         
         self.current_employee.payment_method = self.edit_payment_method_field.value or 'на карту'
+        self.current_employee.staff_status = self.edit_staff_status_dropdown.value or 'в штате'
+        self.current_employee.criminal_liability = self.edit_criminal_liability_dropdown.value or 'нет'
         
         self.current_employee.save()
         

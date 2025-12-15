@@ -260,19 +260,10 @@ def home_page(page: ft.Page = None) -> ft.Column:
                 elif new_date:
                     employee.guard_license_date = new_date
                 employee.save()
-                # Перезагружаем данные и обновляем диалог
+                # Перезагружаем данные и обновляем контейнеры
                 nonlocal expiring_licenses, license_min_days
                 expiring_licenses, license_min_days = get_expiring_licenses()
-                # Обновляем главную страницу
-                from views.home import home_page
-                main_content = None
-                for control in page.controls:
-                    if hasattr(control, 'controls') and len(control.controls) > 2:
-                        main_content = control.controls[2]
-                        break
-                if main_content:
-                    main_content.content = home_page(page)
-                    page.update()
+                update_containers(search_field.value if search_field else "")
                 
                 if expiring_licenses:
                     show_license_details(None)
@@ -382,19 +373,10 @@ def home_page(page: ft.Page = None) -> ft.Column:
                 elif new_date:
                     employee.medical_exam_date = new_date
                 employee.save()
-                # Перезагружаем данные и обновляем диалог
+                # Перезагружаем данные и обновляем контейнеры
                 nonlocal expiring_medical, medical_min_days
                 expiring_medical, medical_min_days = get_expiring_medical()
-                # Обновляем главную страницу
-                from views.home import home_page
-                main_content = None
-                for control in page.controls:
-                    if hasattr(control, 'controls') and len(control.controls) > 2:
-                        main_content = control.controls[2]
-                        break
-                if main_content:
-                    main_content.content = home_page(page)
-                    page.update()
+                update_containers(search_field.value if search_field else "")
                 
                 if expiring_medical:
                     show_medical_details(None)
@@ -544,19 +526,10 @@ def home_page(page: ft.Page = None) -> ft.Column:
                 elif new_date:
                     employee.periodic_check_date = new_date
                 employee.save()
-                # Перезагружаем данные и обновляем диалог
+                # Перезагружаем данные и обновляем контейнеры
                 nonlocal expiring_periodic_checks, periodic_min_days
                 expiring_periodic_checks, periodic_min_days = get_expiring_periodic_checks()
-                # Обновляем главную страницу
-                from views.home import home_page
-                main_content = None
-                for control in page.controls:
-                    if hasattr(control, 'controls') and len(control.controls) > 2:
-                        main_content = control.controls[2]
-                        break
-                if main_content:
-                    main_content.content = home_page(page)
-                    page.update()
+                update_containers(search_field.value if search_field else "")
                 
                 if expiring_periodic_checks:
                     show_periodic_details(None)
