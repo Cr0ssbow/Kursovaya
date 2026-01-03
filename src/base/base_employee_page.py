@@ -228,7 +228,7 @@ class BaseEmployeePage(BasePage):
     def _create_termination_fields(self):
         """Создает поля для увольнения"""
         self.termination_date_field = ft.TextField(label="Дата увольнения (дд.мм.гггг)", width=200, on_change=self.format_date_input, max_length=10)
-        self.termination_reason_field = ft.TextField(label="Причина увольнения (необязательно)", width=300, multiline=True)
+        self.termination_reason_field = ft.TextField(label="Причина увольнения", width=300, multiline=True)
     
     def show_termination_dialog(self, employee):
         """Показывает диалог увольнения"""
@@ -270,11 +270,14 @@ class BaseEmployeePage(BasePage):
             if not termination_date_value:
                 raise ValueError("Дата увольнения обязательна!")
             
+            if not termination_reason_value:
+                raise ValueError("Причина увольнения обязательна!")
+            
             from datetime import datetime
             termination_date = datetime.strptime(termination_date_value, "%d.%m.%Y").date()
             
             self.current_employee.termination_date = termination_date
-            self.current_employee.termination_reason = termination_reason_value or None
+            self.current_employee.termination_reason = termination_reason_value
             self.current_employee.save()
             
             # Логирование

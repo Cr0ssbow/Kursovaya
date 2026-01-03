@@ -10,12 +10,12 @@ class ChiefEmployeesPage(BaseEmployeePage):
     def _create_form_fields(self):
         """Создает поля формы"""
         super()._create_form_fields()
-        self.name_field = ft.TextField(label="ФИО", width=300)
-        self.birth_field = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=180, on_change=self.format_date_input, max_length=10)
-        self.position_field = ft.TextField(label="Должность", width=250)
-        self.guard_rank_field = ft.Dropdown(label="Разряд охранника", width=180, options=[ft.dropdown.Option("ОВН"), ft.dropdown.Option("Б")] + [ft.dropdown.Option(str(i)) for i in range(4, 7)])
-        self.salary_field = ft.TextField(label="Зарплата", width=150)
-        self.payment_method_field = ft.Dropdown(label="Способ выдачи зарплаты", width=250, options=[ft.dropdown.Option("на карту"), ft.dropdown.Option("на руки")], value="на карту")
+        self.name_field = ft.TextField(label="ФИО", width=500)
+        self.birth_field = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=500, on_change=self.format_date_input, max_length=10)
+        self.position_field = ft.TextField(label="Должность", width=500)
+        self.guard_rank_field = ft.Dropdown(label="Разряд охранника", width=500, options=[ft.dropdown.Option("ОВН"), ft.dropdown.Option("Сторож")] + [ft.dropdown.Option(str(i)) for i in range(4, 7)])
+        self.salary_field = ft.TextField(label="Зарплата", width=500)
+        self.payment_method_field = ft.Dropdown(label="Способ выдачи зарплаты", width=500, options=[ft.dropdown.Option("на карту"), ft.dropdown.Option("на руки")], value="на карту")
         self.company_popup = self.create_company_popup_button(250)
     
     def _get_base_query(self):
@@ -214,7 +214,7 @@ class ChiefEmployeesPage(BaseEmployeePage):
         self.edit_name_field = ft.TextField(label="ФИО", width=500)
         self.edit_birth_field = ft.TextField(label="Дата рождения (дд.мм.гггг)", width=500, on_change=self.format_date_input, max_length=10)
         self.edit_position_field = ft.TextField(label="Должность", width=500)
-        self.edit_guard_rank_field = ft.Dropdown(label="Разряд охранника", width=500, options=[ft.dropdown.Option("ОВН"), ft.dropdown.Option("Б")] + [ft.dropdown.Option(str(i)) for i in range(4, 7)])
+        self.edit_guard_rank_field = ft.Dropdown(label="Разряд охранника", width=500, options=[ft.dropdown.Option("ОВН"), ft.dropdown.Option("Сторож")] + [ft.dropdown.Option(str(i)) for i in range(4, 7)])
         self.edit_salary_field = ft.TextField(label="Зарплата", width=500)
         self.edit_payment_method_field = ft.Dropdown(label="Способ выдачи зарплаты", width=500, options=[ft.dropdown.Option("на карту"), ft.dropdown.Option("на руки")])
         self.edit_company_popup = self.create_edit_company_popup_button()

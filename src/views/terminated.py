@@ -18,7 +18,6 @@ def terminated_page(page: ft.Page = None) -> ft.Column:
         actions=[
             ft.TextButton("Вернуть", on_click=lambda e: restore_employee(current_employee), style=ft.ButtonStyle(color=ft.Colors.GREEN)),
             ft.TextButton("Редактировать", on_click=lambda e: show_edit_termination(current_employee)),
-            ft.TextButton("Удалить", on_click=lambda e: delete_employee_permanently(current_employee), style=ft.ButtonStyle(color=ft.Colors.RED)),
             ft.TextButton("Отмена", on_click=lambda e: close_actions_dialog())
         ]
     )

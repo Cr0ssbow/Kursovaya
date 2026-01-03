@@ -1,4 +1,6 @@
-import flet as ft
+import flet
+from flet import app
+ft = flet
 import sys
 from peewee import *
 from menu.drawer import drawer
@@ -43,15 +45,6 @@ def main(page: ft.Page):
     
     # Инициализируем менеджер авторизации
     auth_manager = AuthManager()
-    
-    # Создаем фиктивного администратора для полного доступа
-    class MockUser:
-        def __init__(self):
-            self.username = "Админ"
-            self.role = "Admin"
-            self.allowed_pages = "home,settings,employees,chief_employees,office_employees,objects,calendar,statistics,notes,terminated,discarded_cards,logs,administration,staff_list"
-    
-    auth_manager.current_user = MockUser()
     
     # Загружаем тему из БД при старте
     theme = load_theme_from_db()
@@ -134,11 +127,17 @@ def main(page: ft.Page):
         elif page_name == "staff_list":
             content_container.content = staff_list_page(page)
         elif page_name == "duty_calendar":
-            content_container.content = duty_calendar_page(page)
+            duty_content, duty_dialog = duty_calendar_page(page)
+            content_container.content = duty_content
+            if duty_dialog not in page.overlay:
+                page.overlay.append(duty_dialog)
         elif page_name == "accounting_calendar":
-            content_container.content = accounting_calendar_page(page)
+            accounting_content, accounting_dialog = accounting_calendar_page(page)
+            content_container.content = accounting_content
+            if accounting_dialog not in page.overlay:
+                page.overlay.append(accounting_dialog)
 
-        page.close(page.drawer)
+        page.close_drawer()
         page.update()
     
     def show_main_app():
@@ -198,14 +197,13 @@ def main(page: ft.Page):
         page.add(
             ft.Container(
                 content=login_content,
-                alignment=ft.alignment.center,
+                alignment=ft.Alignment.CENTER,
                 expand=True
             )
         )
         page.update()
     
-    # Временно отключаем авторизацию - сразу показываем основное приложение
-    show_main_app()
-    #show_login()
+    # Показываем экран авторизации
+    show_login()
 
-ft.app(target=main)
+flet.app(target=main)

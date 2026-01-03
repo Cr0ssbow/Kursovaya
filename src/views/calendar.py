@@ -3,7 +3,7 @@ import datetime
 from database.models import Assignment, Employee, Object, ChiefEmployee, ChiefObjectAssignment, CashWithdrawal, db
 from peewee import *
 from views.settings import load_cell_shape_from_db
-from base.base_page import BasePage
+from base.base_calendar import BaseCalendar
 
 # Словарь русских названий месяцев
 RUSSIAN_MONTHS = {
@@ -12,29 +12,71 @@ RUSSIAN_MONTHS = {
     9: "Сентябрь", 10: "Октябрь", 11: "Ноябрь", 12: "Декабрь"
 }
 
-class CalendarPage(BasePage):
+class CalendarPage(BaseCalendar):
     """Страница календаря смен"""
     
     def __init__(self, page: ft.Page):
         super().__init__(page)
-        self.current_year = datetime.date.today().year
-        self.current_month = datetime.date.today().month
         self.current_assignment = None
-        self.current_shift_date = None
-        self._init_components()
+        self.current_vzn = None
+        self._init_calendar_specific_components()
     
-    def _init_components(self):
-        """Инициализация компонентов"""
-        self.current_month_display = ft.Text("", size=24, weight="bold")
-        self.calendar_grid_container = ft.Column()
-        self.shifts_page = 0
-        self.shifts_page_size = 12
-        self.sort_by = None
-        self._create_dialogs()
-        self._create_form_fields()
-        self.update_calendar()
+    def _get_calendar_title(self):
+        return "Календарь начальника охраны"
     
-    def _create_dialogs(self):
+    def _get_shifts_dialog_title(self):
+        return "Смены на дату"
+    
+    def _get_add_shift_dialog_title(self):
+        return "Добавить смену"
+    
+    def _get_no_shifts_text(self):
+        return "На эту дату смен и ВЗН нет"
+    
+    def _get_day_count_color(self):
+        return ft.Colors.BLUE
+    
+    def _get_month_data(self, first_day, last_day):
+        """Возвращает данные для месяца"""
+        # Подсчитываем обычные смены
+        assignments = Assignment.select(Assignment.date, fn.COUNT(Assignment.id).alias('count')).where(
+            (Assignment.date >= first_day) & (Assignment.date <= last_day)
+        ).group_by(Assignment.date)
+        
+        # Подсчитываем ВЗН
+        vzn_records = CashWithdrawal.select(CashWithdrawal.date, fn.COUNT(CashWithdrawal.id).alias('count')).where(
+            (CashWithdrawal.date >= first_day) & (CashWithdrawal.date <= last_day)
+        ).group_by(CashWithdrawal.date)
+        
+        cache = {}
+        # Добавляем обычные смены
+        for assignment in assignments:
+            cache[assignment.date] = assignment.count
+        
+        # Добавляем ВЗН к общему количеству
+        for vzn in vzn_records:
+            cache[vzn.date] = cache.get(vzn.date, 0) + vzn.count
+        
+        return cache
+    
+    def _get_shifts_for_date(self, date_obj):
+        """Возвращает смены для даты"""
+        assignments = Assignment.select().join(Employee).switch(Assignment).join(Object).where(Assignment.date == date_obj)
+        vzn_records = CashWithdrawal.select().join(Employee).where(CashWithdrawal.date == date_obj)
+        return list(assignments), list(vzn_records)
+    
+    def _create_shift_list_item(self, shift):
+        """Создает элемент списка смены"""
+        # Этот метод не используется, так как переопределен update_shifts_list
+        pass
+    
+    def _init_calendar_specific_components(self):
+        """Инициализация специфичных компонентов"""
+        self._create_calendar_dialogs()
+        self._create_calendar_form_fields()
+        self.load_chiefs()
+    
+    def _create_calendar_dialogs(self):
         """Создает диалоги"""
         self.shifts_list_view = ft.ListView(expand=True, spacing=5, height=500)
         self.shifts_page_text = ft.Text("Страница 1")
@@ -124,7 +166,7 @@ class CalendarPage(BasePage):
             ]
         )
     
-    def _create_form_fields(self):
+    def _create_calendar_form_fields(self):
         """Создает поля форм"""
         # Поля редактирования смены
         self.absent_checkbox = ft.Checkbox(label="Пропуск", on_change=lambda e: self.toggle_absent_comment())
@@ -136,20 +178,12 @@ class CalendarPage(BasePage):
         self.comment_field = ft.TextField(label="Комментарий", multiline=True)
         
         # Поля добавления смены
-        self.employee_search = ft.TextField(label="Поиск сотрудника", width=300, on_change=lambda e: self.search_employees(e.control.value))
-        self.search_results = ft.Column(visible=False)
-        self.object_search = ft.TextField(label="Поиск объекта", width=300, on_change=lambda e: self.search_objects(e.control.value))
-        self.object_search_results = ft.Column(visible=False)
         self.chief_display = ft.Text("Начальник: не назначен", size=16)
         self.selected_chief_id = None
-        self.hours_dropdown = ft.Dropdown(label="Количество часов", options=[ft.dropdown.Option("12"), ft.dropdown.Option("24")], value="12", width=200)
         
-        # Новые поля для выбора адреса и ставки
-        self.address_dropdown = ft.Dropdown(label="Выберите адрес", width=400, visible=False)
-        self.rate_dropdown = ft.Dropdown(label="Выберите ставку", width=300, visible=False)
-        self.selected_object = None
+        # Поле для выбора адреса
+        self.address_dropdown = ft.Dropdown(label="Выберите адрес", width=500, visible=False)
         self.selected_address_id = None
-        self.selected_rate_id = None
         
         # Поля для ВЗН (аналогично сменам)
         self.vzn_employee_search = ft.TextField(label="Поиск сотрудника", width=300, on_change=lambda e: self.search_vzn_employees(e.control.value))
@@ -159,12 +193,12 @@ class CalendarPage(BasePage):
         self.vzn_chief_display = ft.Text("Начальник: не назначен", size=16)
         self.vzn_selected_chief_id = None
         self.vzn_hours_dropdown = ft.Dropdown(label="Количество часов", options=[ft.dropdown.Option("12"), ft.dropdown.Option("24")], value="12", width=200)
-        self.vzn_address_dropdown = ft.Dropdown(label="Выберите адрес", width=400, visible=False)
-        self.vzn_rate_dropdown = ft.Dropdown(label="Выберите ставку", width=300, visible=False)
+        self.vzn_address_dropdown = ft.Dropdown(label="Выберите адрес", width=500, visible=False)
+        self.vzn_rate_dropdown = ft.Dropdown(label="Выберите ставку", width=500, visible=False)
         self.vzn_selected_object = None
         self.vzn_selected_address_id = None
         self.vzn_selected_rate_id = None
-        self.vzn_comment_field = ft.TextField(label="Комментарий", multiline=True, width=400)
+        self.vzn_comment_field = ft.TextField(label="Комментарий", multiline=True, width=500)
         
         # Поля для редактирования ВЗН
         self.vzn_absent_checkbox = ft.Checkbox(label="Пропуск", on_change=lambda e: self.toggle_vzn_absent_comment())
@@ -179,9 +213,11 @@ class CalendarPage(BasePage):
         self.load_chiefs()
     
     def close_shifts_dialog(self):
-        self.shifts_dialog.open = False
-        self.page.dialog = None
-        self.page.update()
+        try:
+            self.shifts_dialog.open = False
+            self.page.update()
+        except:
+            pass
     
     def open_add_shift_dialog(self):
         self.setup_add_shift_form()
@@ -190,9 +226,12 @@ class CalendarPage(BasePage):
         self.page.update()
     
     def close_add_shift_dialog(self):
-        self.add_shift_dialog.open = False
-        self.page.dialog = self.shifts_dialog
-        self.page.update()
+        try:
+            self.add_shift_dialog.open = False
+            self.page.dialog = self.shifts_dialog
+            self.page.update()
+        except:
+            pass
     
     def open_add_vzn_dialog(self):
         self.setup_add_vzn_form()
@@ -201,14 +240,19 @@ class CalendarPage(BasePage):
         self.page.update()
     
     def close_add_vzn_dialog(self):
-        self.add_vzn_dialog.open = False
-        self.page.dialog = self.shifts_dialog
-        self.page.update()
+        try:
+            self.add_vzn_dialog.open = False
+            self.page.dialog = self.shifts_dialog
+            self.page.update()
+        except:
+            pass
     
     def close_edit_dialog(self):
-        self.edit_dialog.open = False
-        self.page.dialog = None
-        self.page.update()
+        try:
+            self.edit_dialog.open = False
+            self.page.update()
+        except:
+            pass
     
     def confirm_delete_shift(self):
         self.page.dialog = self.delete_confirm_dialog
@@ -216,9 +260,12 @@ class CalendarPage(BasePage):
         self.page.update()
     
     def close_delete_confirm(self):
-        self.delete_confirm_dialog.open = False
-        self.page.dialog = self.edit_dialog
-        self.page.update()
+        try:
+            self.delete_confirm_dialog.open = False
+            self.page.dialog = self.edit_dialog
+            self.page.update()
+        except:
+            pass
     
     def delete_shift(self):
         if self.current_assignment:
@@ -231,11 +278,13 @@ class CalendarPage(BasePage):
                 if hasattr(self, '_shifts_cache') and self.current_shift_date in self._shifts_cache:
                     self._shifts_cache[self.current_shift_date] = max(0, self._shifts_cache[self.current_shift_date] - 1)
                 
-                self.delete_confirm_dialog.open = False
-                self.edit_dialog.open = False
-                self.page.dialog = None
-                self.update_calendar()
-                self.show_shifts_for_date(self.current_shift_date)
+                try:
+                    self.delete_confirm_dialog.open = False
+                    self.edit_dialog.open = False
+                    self.update_calendar()
+                    self.show_shifts_for_date(self.current_shift_date)
+                except:
+                    pass
     
     def toggle_absent_comment(self):
         self.absent_comment_field.visible = self.absent_checkbox.value
@@ -629,37 +678,12 @@ class CalendarPage(BasePage):
         if self.page:
             self.page.update()
     
-    def search_objects(self, query):
-        if not query or len(query) < 2:
-            self.object_search_results.visible = False
-            self.page.update()
-            return
-        
-        def operation():
-            return list(Object.select().where(Object.name.contains(query))[:5])
-        
-        objects = self.safe_db_operation(operation) or []
-        
-        self.object_search_results.controls.clear()
-        if objects:
-            for obj in objects:
-                self.object_search_results.controls.append(
-                    ft.ListTile(title=ft.Text(obj.name), on_click=lambda e, object_item=obj: self.select_object(object_item))
-                )
-            self.object_search_results.visible = True
-        else:
-            self.object_search_results.controls.append(ft.Text("Объект не найден", color=ft.Colors.ERROR))
-            self.object_search_results.visible = True
-        self.page.update()
-    
     def select_object(self, obj):
-        self.object_search.value = obj.name
-        self.object_search_results.visible = False
-        self.selected_object = obj
+        super().select_object(obj)
         self.load_object_addresses(obj)
-        self.load_object_rates(obj)
         self.auto_assign_chief(obj)
-        self.page.update()
+        if self.page:
+            self.page.update()
     
     def get_object_address(self, obj):
         """Получает адрес объекта"""
@@ -703,44 +727,10 @@ class CalendarPage(BasePage):
         else:
             self.address_dropdown.visible = False
     
-    def load_object_rates(self, obj):
-        """Загружает ставки объекта"""
-        def operation():
-            from database.models import ObjectRate
-            return list(ObjectRate.select().where(ObjectRate.object == obj))
-        
-        rates = self.safe_db_operation(operation) or []
-        
-        self.rate_dropdown.options.clear()
-        if rates:
-            for rate in rates:
-                label = f"{rate.rate} ₽/ч"
-                if rate.description:
-                    label += f" - {rate.description}"
-                if rate.is_default:
-                    label += " (по умолчанию)"
-                self.rate_dropdown.options.append(
-                    ft.dropdown.Option(key=str(rate.id), text=label)
-                )
-            # Выбираем ставку по умолчанию
-            default_rate = next((rate for rate in rates if rate.is_default), rates[0] if rates else None)
-            if default_rate:
-                self.rate_dropdown.value = str(default_rate.id)
-                self.selected_rate_id = default_rate.id
-            self.rate_dropdown.visible = True
-            self.rate_dropdown.on_change = lambda e: self.on_rate_change(e.control.value)
-        else:
-            self.rate_dropdown.visible = False
-    
     def on_address_change(self, address_id):
         """Обработчик смены адреса"""
         if address_id:
             self.selected_address_id = int(address_id)
-    
-    def on_rate_change(self, rate_id):
-        """Обработчик смены ставки"""
-        if rate_id:
-            self.selected_rate_id = int(rate_id)
     
     def auto_assign_chief(self, obj):
         """Автоматически назначает начальника на основе объекта"""
@@ -767,7 +757,7 @@ class CalendarPage(BasePage):
         self.selected_address_id = None
         self.selected_rate_id = None
         self.hours_dropdown.value = "12"
-        self.comment_field.value = ""
+        self.description_field.value = ""
         self.search_results.visible = False
         self.object_search_results.visible = False
         self.address_dropdown.visible = False
@@ -784,7 +774,7 @@ class CalendarPage(BasePage):
             self.rate_dropdown,
             self.chief_display,
             self.hours_dropdown,
-            self.comment_field
+            self.description_field
         ]
     
 
@@ -812,7 +802,7 @@ class CalendarPage(BasePage):
                 date=self.current_shift_date,
                 hours=int(self.hours_dropdown.value),
                 hourly_rate=rate.rate,
-                comment=self.comment_field.value or None
+                comment=self.description_field.value or None
             )
             
             salary_increase = float(rate.rate) * int(self.hours_dropdown.value)
@@ -1125,9 +1115,11 @@ class CalendarPage(BasePage):
                 self.show_shifts_for_date(self.current_shift_date)
     
     def close_vzn_edit_dialog(self):
-        self.edit_vzn_dialog.open = False
-        self.page.dialog = None
-        self.page.update()
+        try:
+            self.edit_vzn_dialog.open = False
+            self.page.update()
+        except:
+            pass
     
     def render(self) -> ft.Column:
         """Возвращает интерфейс страницы"""

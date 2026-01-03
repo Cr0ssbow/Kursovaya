@@ -19,7 +19,7 @@ class EmployeesPage(BaseEmployeePage):
         self.guard_license_field = ft.TextField(label="Дата выдачи УЧО (дд.мм.гггг)", width=500, on_change=self.format_date_input, max_length=10)
         self.medical_exam_field = ft.TextField(label="Дата прохождения медкомиссии (дд.мм.гггг)", width=500, on_change=self.format_date_input, max_length=10)
         self.periodic_check_field = ft.TextField(label="Дата прохождения периодической проверки (дд.мм.гггг)", width=500, on_change=self.format_date_input, max_length=10)
-        self.guard_rank_field = ft.Dropdown(label="Разряд охранника", width=500, options=[ft.dropdown.Option("ОВН"), ft.dropdown.Option("Б")] + [ft.dropdown.Option(str(i)) for i in range(4, 7)])
+        self.guard_rank_field = ft.Dropdown(label="Разряд охранника", width=500, options=[ft.dropdown.Option("ОВН"), ft.dropdown.Option("Сторож")] + [ft.dropdown.Option(str(i)) for i in range(4, 7)])
         self.payment_method_field = ft.Dropdown(label="Способ выдачи зарплаты", width=500, options=[ft.dropdown.Option("на карту"), ft.dropdown.Option("на руки")], value="на карту")
         self.company_popup = self.create_company_popup_button()
     
@@ -32,7 +32,7 @@ class EmployeesPage(BaseEmployeePage):
         self.edit_guard_license_field = ft.TextField(label="Дата выдачи УЧО (дд.мм.гггг)", width=500, on_change=self.format_date_input, max_length=10)
         self.edit_medical_exam_field = ft.TextField(label="Дата прохождения медкомиссии (дд.мм.гггг)", width=500, on_change=self.format_date_input, max_length=10)
         self.edit_periodic_check_field = ft.TextField(label="Дата прохождения периодической проверки (дд.мм.гггг)", width=500, on_change=self.format_date_input, max_length=10)
-        self.edit_guard_rank_field = ft.Dropdown(label="Разряд охранника", width=500, options=[ft.dropdown.Option("ОВН"), ft.dropdown.Option("Б")] + [ft.dropdown.Option(str(i)) for i in range(4, 7)])
+        self.edit_guard_rank_field = ft.Dropdown(label="Разряд охранника", width=500, options=[ft.dropdown.Option("ОВН"), ft.dropdown.Option("Сторож")] + [ft.dropdown.Option(str(i)) for i in range(4, 7)])
         self.edit_payment_method_field = ft.Dropdown(label="Способ выдачи зарплаты", width=500, options=[ft.dropdown.Option("на карту"), ft.dropdown.Option("на руки")])
         self.edit_company_popup = self.create_edit_company_popup_button()
     
@@ -70,11 +70,11 @@ class EmployeesPage(BaseEmployeePage):
     def _get_sort_key(self, employee):
         """Возвращает ключ для сортировки по разряду"""
         rank = getattr(employee, 'guard_rank', '') or ''
-        # Порядок сортировки: 4, 5, 6, Б, ОВН
+        # Порядок сортировки: 4, 5, 6, Сторож, ОВН
         if rank == '4': return 1
         elif rank == '5': return 2
         elif rank == '6': return 3
-        elif rank == 'Б': return 4
+        elif rank == 'Сторож': return 4
         elif rank == 'ОВН': return 5
         else: return 0
     
@@ -316,7 +316,7 @@ class EmployeesPage(BaseEmployeePage):
                 options=[
                     ft.dropdown.Option("Все разряды"),
                     ft.dropdown.Option("ОВН"),
-                    ft.dropdown.Option("Б"),
+                    ft.dropdown.Option("Сторож"),
                     ft.dropdown.Option("4"),
                     ft.dropdown.Option("5"),
                     ft.dropdown.Option("6"),

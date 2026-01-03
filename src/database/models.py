@@ -320,12 +320,45 @@ class CashWithdrawal(BaseModel):
             (('employee', 'date'), False),
         )
 
+class DutyShift(BaseModel):
+    """Модель смен дежурной части"""
+    employee = ForeignKeyField(GuardEmployee, backref='duty_shifts', on_delete='CASCADE')
+    date = DateField(verbose_name="Дата дежурства")
+    hours = IntegerField(verbose_name="Количество часов")
+    hourly_rate = DecimalField(max_digits=7, decimal_places=2, verbose_name="Почасовая ставка")
+    description = TextField(null=True, verbose_name="Описание")
+    created_by_user_id = IntegerField(null=True, verbose_name="Создан пользователем")
+    created_at = DateTimeField(default=datetime.now)
+    
+    class Meta:
+        table_name = 'duty_shifts'
+        indexes = (
+            (('date',), False),
+            (('employee', 'date'), False),
+        )
+
+class AccountingOperation(BaseModel):
+    """Модель финансовых операций бухгалтерии"""
+    date = DateField(verbose_name="Дата операции")
+    operation_type = CharField(max_length=50, verbose_name="Тип операции")
+    amount = DecimalField(max_digits=10, decimal_places=2, verbose_name="Сумма")
+    description = TextField(null=True, verbose_name="Описание")
+    employee = ForeignKeyField(GuardEmployee, backref='accounting_operations', on_delete='CASCADE', null=True)
+    created_by_user_id = IntegerField(null=True, verbose_name="Создан пользователем")
+    created_at = DateTimeField(default=datetime.now)
+    
+    class Meta:
+        table_name = 'accounting_operations'
+        indexes = (
+            (('date',), False),
+        )
+
 # Создание таблиц
 def init_database():
     """Инициализация базы данных"""
     try:
         db.connect()
-        db.create_tables([Company, GuardEmployee, ChiefEmployee, OfficeEmployee, EmployeeCompany, Settings, Role, User, UserLog, Object, ObjectAddress, ObjectRate, Assignment, ChiefObjectAssignment, PersonalCard, PersonalCardPhoto, EmployeeDocument, EmployeeDocumentPhoto, CashWithdrawal], safe=True)
+        db.create_tables([Company, GuardEmployee, ChiefEmployee, OfficeEmployee, EmployeeCompany, Settings, Role, User, UserLog, Object, ObjectAddress, ObjectRate, Assignment, ChiefObjectAssignment, PersonalCard, PersonalCardPhoto, EmployeeDocument, EmployeeDocumentPhoto, CashWithdrawal, DutyShift, AccountingOperation], safe=True)
         
         # Создаем компании по умолчанию
         for company_name in ["Легион", "Норд", "Росбезопасность"]:

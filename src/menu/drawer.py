@@ -11,11 +11,11 @@ def drawer(on_change_handler, auth_manager=None):
         ("employees", "Сотрудники охраны", ft.Icons.SECURITY, ft.Icons.SECURITY_OUTLINED),
         ("chief_employees", "Начальники охраны", ft.Icons.SUPERVISOR_ACCOUNT, ft.Icons.SUPERVISOR_ACCOUNT_OUTLINED),
         ("office_employees", "Сотрудники офиса", ft.Icons.WORK, ft.Icons.WORK_OUTLINED),
-        ("staff_list", "Актуальный перечень штатного состава", ft.Icons.LIST_ALT, ft.Icons.LIST_ALT_OUTLINED),
+        ("staff_list", "Перечень штатного состава", ft.Icons.LIST_ALT, ft.Icons.LIST_ALT_OUTLINED),
         ("objects", "Объекты", ft.Icons.BUSINESS, ft.Icons.BUSINESS_OUTLINED),
-        ("calendar", "Календарь начальника охраны", ft.Icons.SCHEDULE, ft.Icons.SCHEDULE_OUTLINED),
-        ("duty_calendar", "Календарь дежурной части", ft.Icons.SECURITY, ft.Icons.SECURITY_OUTLINED),
-        ("accounting_calendar", "Календарь бухгалтерии", ft.Icons.ACCOUNT_BALANCE, ft.Icons.ACCOUNT_BALANCE_OUTLINED),
+        ("calendar", "График дежурств начальника охраны", ft.Icons.SCHEDULE, ft.Icons.SCHEDULE_OUTLINED),
+        ("duty_calendar", "График дежурств дежурной части", ft.Icons.SECURITY, ft.Icons.SECURITY_OUTLINED),
+        ("accounting_calendar", "График дежурств бухгалтерии", ft.Icons.ACCOUNT_BALANCE, ft.Icons.ACCOUNT_BALANCE_OUTLINED),
         ("statistics", "Статистика", ft.Icons.BAR_CHART, ft.Icons.BAR_CHART_OUTLINED),
         ("notes", "Заметки", ft.Icons.NOTE, ft.Icons.NOTE_OUTLINED),
         ("terminated", "Уволенные сотрудники", ft.Icons.PERSON_OFF, ft.Icons.PERSON_OFF_OUTLINED),
@@ -51,4 +51,5 @@ def drawer(on_change_handler, auth_manager=None):
     return ft.NavigationDrawer(
         on_change=on_change_handler,
         controls=controls,
+        tile_padding=ft.padding.only(left=0, right=32)
     )
